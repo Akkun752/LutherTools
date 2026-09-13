@@ -18,7 +18,6 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -339,7 +338,7 @@ void MainWindow::setStreamInfoEnabled(bool enabled)
     // inutilisables hors connexion : on suit donc le même état. La liste
     // enregistrée localement (m_presets) n'est en revanche pas vidée, elle
     // reste disponible à la prochaine connexion.
-    ui->presetListWidget->setEnabled(enabled);
+    ui->presetListScrollArea->setEnabled(enabled);
     ui->presetNameEdit->setEnabled(enabled);
     ui->presetSaveButton->setEnabled(enabled);
 
@@ -763,12 +762,22 @@ void MainWindow::savePresets()
 
 void MainWindow::refreshPresetList()
 {
-    ui->presetListWidget->clear();
+    // Un simple QVBoxLayout dans une QScrollArea plutôt qu'un QListWidget +
+    // setItemWidget() : ce dernier ne recalculait la largeur de chaque ligne
+    // (et donc la position de la croix de suppression, tout à droite) qu'au
+    // premier redimensionnement réel du widget - jamais au remplissage
+    // initial, même différé. Un layout "normal" comme celui-ci est géré par
+    // le mécanisme de layout standard de Qt et n'a pas ce défaut.
+    QLayoutItem *oldItem;
+    while ((oldItem = ui->presetListContentLayout->takeAt(0)) != nullptr) {
+        delete oldItem->widget();
+        delete oldItem;
+    }
 
     for (const StreamPreset &preset : std::as_const(m_presets)) {
         const QString name = preset.name;
 
-        auto *row = new QWidget(ui->presetListWidget);
+        auto *row = new QWidget(ui->presetListScrollAreaContents);
         auto *rowLayout = new QHBoxLayout(row);
         rowLayout->setContentsMargins(2, 1, 2, 1);
         rowLayout->setSpacing(2);
@@ -776,7 +785,7 @@ void MainWindow::refreshPresetList()
         const QString buttonStyle = QStringLiteral("QToolButton { padding: 0px 3px; }");
 
         auto *nameLabel = new QLabel(row);
-        nameLabel->setText(row->fontMetrics().elidedText(name, Qt::ElideRight, 100));
+        nameLabel->setText(row->fontMetrics().elidedText(name, Qt::ElideRight, 145));
         nameLabel->setToolTip(name);
         rowLayout->addWidget(nameLabel, 1);
 
@@ -804,9 +813,8 @@ void MainWindow::refreshPresetList()
         connect(deleteButton, &QToolButton::clicked, this, [this, name]() { deletePreset(name); });
         rowLayout->addWidget(deleteButton);
 
-        auto *item = new QListWidgetItem(ui->presetListWidget);
-        item->setSizeHint(row->sizeHint());
-        ui->presetListWidget->addItem(item);
-        ui->presetListWidget->setItemWidget(item, row);
+        ui->presetListContentLayout->addWidget(row);
     }
+
+    ui->presetListContentLayout->addStretch();
 }

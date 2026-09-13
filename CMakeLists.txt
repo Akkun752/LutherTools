@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LutherTools VERSION 0.2.1 LANGUAGES CXX)
+project(LutherTools VERSION 0.2.2 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -11,10 +11,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # version.h (macros C++, ex: fenêtre) et version.rc (propriétés Windows de
-# l'exe) sont générés à partir de la VERSION ci-dessus : changer le numéro de
-# version se fait uniquement ici.
+# l'exe + icône embarquée dans l'exécutable) sont générés à partir de la
+# VERSION ci-dessus : changer le numéro de version se fait uniquement ici.
 configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h @ONLY)
 if(WIN32)
+    # Chemin absolu : version.rc est généré dans le dossier de build, tandis
+    # que l'icône reste dans le dossier source.
+    set(LUTHERTOOLS_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/res/LutherTools.ico")
     configure_file(version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
 endif()
 

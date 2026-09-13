@@ -5,6 +5,14 @@
 // dans CMakeLists.txt (et les champs ci-dessous si besoin, une seule fois).
 #include <windows.h>
 
+// Icône de l'exécutable : contrairement à QWindow::setWindowIcon() (qui ne
+// fait qu'illustrer la fenêtre une fois l'appli lancée), c'est cette
+// ressource ICON qui donne son icône au fichier .exe lui-même dans
+// l'Explorateur et, surtout, à la barre des tâches Windows dès le lancement
+// (avant même que Qt n'ait eu la main). Le premier ICON du fichier .rc
+// devient l'icône par défaut de l'exécutable.
+IDI_ICON1 ICON "@LUTHERTOOLS_ICON_PATH@"
+
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
 PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
