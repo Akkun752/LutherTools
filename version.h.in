@@ -1,0 +1,13 @@
+#ifndef VERSION_H
+#define VERSION_H
+
+// Généré par CMake à partir de la VERSION déclarée dans project() de
+// CMakeLists.txt (configure_file, voir version.h dans le dossier de build).
+// Ne pas éditer directement : modifie la version dans CMakeLists.txt.
+
+#define LUTHERTOOLS_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define LUTHERTOOLS_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define LUTHERTOOLS_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define LUTHERTOOLS_VERSION_STRING "@PROJECT_VERSION@"
+
+#endif // VERSION_H

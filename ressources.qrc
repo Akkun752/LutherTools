@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/res">
+        <file>res/LutherTools.png</file>
+        <file>res/LutherTools.ico</file>
+        <file>res/twitch.png</file>
+    </qresource>
+</RCC>

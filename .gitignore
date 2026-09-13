@@ -1,0 +1,53 @@
+# Dossiers de build (CMake + Qt Creator) : entièrement régénérés par
+# `cmake .` + `mingw32-make`, rien d'essentiel dedans.
+build/
+build*/
+out/
+[Dd]ebug/
+[Rr]elease/
+cmake-build-*/
+
+# Artefacts CMake (au cas où un build serait lancé directement à la racine).
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+Makefile
+
+# Fichiers générés par Qt (moc/uic/rcc) et binaires.
+*_autogen/
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*.qm
+*.o
+*.obj
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.a
+
+# Config Qt Creator spécifique à la machine (chemins locaux, kits, etc.) :
+# rien de tout ça n'est nécessaire pour compiler le projet (CMakeLists.txt
+# suffit), et c'est propre à chaque poste.
+.qtcreator/
+*.user
+*.user.*
+CMakeLists.txt.user*
+CMakeUserPresets.json
+
+# Autosave Qt Designer.
+*.autosave
+
+# Dumps de crash Windows générés localement.
+*.dmp
+
+# Fichiers système / éditeurs.
+Thumbs.db
+desktop.ini
+.DS_Store
+*.bak
+*.orig
