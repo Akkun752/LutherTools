@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LutherTools VERSION 0.2.2 LANGUAGES CXX)
+project(LutherTools VERSION 0.2.2.1 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -24,8 +24,8 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network WebSockets Multimedia LinguistTools)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network WebSockets Multimedia LinguistTools)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network WebSockets Multimedia LinguistTools TextToSpeech)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network WebSockets Multimedia LinguistTools TextToSpeech)
 
 set(TS_FILES LutherTools_fr_FR.ts)
 
@@ -111,9 +111,13 @@ set_target_properties(LutherTools PROPERTIES
     ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-    MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE TRUE
 )
+
+if(WIN32)
+    set_target_properties(LutherTools PROPERTIES WIN32_EXECUTABLE TRUE)
+elseif(APPLE)
+    set_target_properties(LutherTools PROPERTIES MACOSX_BUNDLE TRUE)
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS LutherTools
