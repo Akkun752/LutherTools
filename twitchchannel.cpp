@@ -20,9 +20,9 @@ TwitchChannel::TwitchChannel(TwitchAuth *auth, QObject *parent)
 
 TwitchChannel::~TwitchChannel()
 {
-    // Même précaution que dans TwitchAuth (cf. son destructeur) : une requête
-    // en cours pourrait sinon déclencher un signal après que nos membres
-    // aient déjà été détruits par le nettoyage implicite d'QObject.
+    // Same precaution as in TwitchAuth (see its destructor): an in-flight
+    // request could otherwise trigger a signal after our members have
+    // already been destroyed by QObject's implicit cleanup.
     delete m_network;
     m_network = nullptr;
 }
@@ -30,7 +30,7 @@ TwitchChannel::~TwitchChannel()
 void TwitchChannel::fetchInfo()
 {
     if (m_auth->accessToken().isEmpty() || m_auth->userId().isEmpty()) {
-        emit infoFailed(QStringLiteral("Non connecté à Twitch"));
+        emit infoFailed(QStringLiteral("Not connected to Twitch"));
         return;
     }
 
@@ -55,7 +55,7 @@ void TwitchChannel::fetchInfo()
         const QJsonArray data =
             QJsonDocument::fromJson(reply->readAll()).object().value(QStringLiteral("data")).toArray();
         if (data.isEmpty()) {
-            emit infoFailed(QStringLiteral("Aucune information de chaîne reçue"));
+            emit infoFailed(QStringLiteral("No channel information received"));
             return;
         }
 
@@ -75,7 +75,7 @@ void TwitchChannel::fetchInfo()
 void TwitchChannel::updateInfo(const QString &title, const QString &gameId, const QStringList &tags)
 {
     if (m_auth->accessToken().isEmpty() || m_auth->userId().isEmpty()) {
-        emit updateFailed(QStringLiteral("Non connecté à Twitch"));
+        emit updateFailed(QStringLiteral("Not connected to Twitch"));
         return;
     }
 
@@ -99,8 +99,8 @@ void TwitchChannel::updateInfo(const QString &title, const QString &gameId, cons
     request.setRawHeader("Client-Id", kTwitchClientId);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 
-    // Twitch attend un PATCH ; QNetworkAccessManager n'a pas de méthode patch()
-    // dédiée, il faut passer par sendCustomRequest().
+    // Twitch expects a PATCH; QNetworkAccessManager has no dedicated patch()
+    // method, so sendCustomRequest() is needed instead.
     QNetworkReply *reply =
         m_network->sendCustomRequest(request, "PATCH", QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -136,8 +136,8 @@ void TwitchChannel::searchCategories(const QString &query)
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
 
-        // Recherche "best effort" pour l'auto-complétion : une erreur ici ne
-        // doit pas interrompre la saisie, on n'émet simplement rien.
+        // "Best effort" search for autocompletion: an error here shouldn't
+        // interrupt typing, so it simply emits nothing.
         if (reply->error() != QNetworkReply::NoError)
             return;
 

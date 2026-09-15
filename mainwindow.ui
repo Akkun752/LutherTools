@@ -50,7 +50,7 @@
         </size>
        </property>
        <property name="title">
-        <string>Paramètres</string>
+        <string>Settings</string>
        </property>
        <layout class="QVBoxLayout" name="connexionLayout">
         <item>
@@ -114,7 +114,7 @@
            <bool>false</bool>
           </property>
           <property name="text">
-           <string>Se connecter avec Twitch</string>
+           <string>Log in with Twitch</string>
           </property>
           <property name="icon">
            <iconset resource="ressources.qrc">
@@ -125,7 +125,7 @@
         <item>
          <widget class="QCheckBox" name="ttsCheckBox">
           <property name="text">
-           <string>Lecture TTS</string>
+           <string>TTS reading</string>
           </property>
           <property name="checked">
            <bool>false</bool>
@@ -137,7 +137,7 @@
           <item>
            <widget class="QCheckBox" name="readEveryNCheckBox">
             <property name="text">
-             <string>Lire 1 message sur</string>
+             <string>Read 1 message out of</string>
             </property>
            </widget>
           </item>
@@ -175,7 +175,7 @@
         <item>
          <widget class="QCheckBox" name="saturationCheckBox">
           <property name="text">
-           <string>Saturation aléatoire</string>
+           <string>Random saturation</string>
           </property>
          </widget>
         </item>
@@ -200,7 +200,7 @@
           <item>
            <widget class="QLabel" name="saturationFactorLabel">
             <property name="text">
-             <string>fois le volume normal</string>
+             <string>times the normal volume</string>
             </property>
            </widget>
           </item>
@@ -224,7 +224,7 @@
           <item>
            <widget class="QLabel" name="saturationChanceLabelBefore">
             <property name="text">
-             <string>Saturer</string>
+             <string>Saturate</string>
             </property>
            </widget>
           </item>
@@ -247,7 +247,7 @@
           <item>
            <widget class="QLabel" name="saturationChanceLabelAfter">
             <property name="text">
-             <string>% des messages</string>
+             <string>% of messages</string>
             </property>
            </widget>
           </item>
@@ -283,19 +283,19 @@
       </widget>
       <widget class="QGroupBox" name="presetsGroup">
        <property name="title">
-        <string>Informations du stream</string>
+        <string>Stream Information</string>
        </property>
        <layout class="QVBoxLayout" name="streamInfoLayout">
         <item>
          <widget class="QGroupBox" name="currentConfigGroup">
           <property name="title">
-           <string>Configuration actuelle</string>
+           <string>Current Configuration</string>
           </property>
           <layout class="QVBoxLayout" name="currentConfigLayout">
            <item>
             <widget class="QLabel" name="streamTitleLabel">
              <property name="text">
-              <string>Titre</string>
+              <string>Title</string>
              </property>
             </widget>
            </item>
@@ -308,14 +308,14 @@
               <number>140</number>
              </property>
              <property name="placeholderText">
-              <string>Titre du stream</string>
+              <string>Stream title</string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QLabel" name="streamCategoryLabel">
              <property name="text">
-              <string>Catégorie</string>
+              <string>Category</string>
              </property>
             </widget>
            </item>
@@ -325,7 +325,7 @@
               <bool>false</bool>
              </property>
              <property name="placeholderText">
-              <string>Nom du jeu / de la catégorie</string>
+              <string>Game name / category</string>
              </property>
             </widget>
            </item>
@@ -352,7 +352,7 @@
               <bool>false</bool>
              </property>
              <property name="placeholderText">
-              <string>Ajouter un tag (Entrée pour valider)</string>
+              <string>Add a tag (Enter to confirm)</string>
              </property>
             </widget>
            </item>
@@ -364,7 +364,7 @@
                 <bool>false</bool>
                </property>
                <property name="text">
-                <string>Charger depuis Twitch</string>
+                <string>Load from Twitch</string>
                </property>
               </widget>
              </item>
@@ -374,7 +374,7 @@
                 <bool>false</bool>
                </property>
                <property name="text">
-                <string>Enregistrer sur Twitch</string>
+                <string>Save to Twitch</string>
                </property>
               </widget>
              </item>
@@ -402,7 +402,7 @@
            </size>
           </property>
           <property name="title">
-           <string>Présets</string>
+           <string>Presets</string>
           </property>
           <layout class="QVBoxLayout" name="presetsSubLayout">
            <item>
@@ -416,7 +416,7 @@
                 <bool>false</bool>
                </property>
                <property name="placeholderText">
-                <string>Nom du préset</string>
+                <string>Preset name</string>
                </property>
               </widget>
              </item>
@@ -426,7 +426,7 @@
                 <bool>false</bool>
                </property>
                <property name="text">
-                <string>Enregistrer</string>
+                <string>Save</string>
                </property>
               </widget>
              </item>
@@ -460,7 +460,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>289</width>
+                <width>240</width>
                 <height>148</height>
                </rect>
               </property>
@@ -495,6 +495,33 @@
        </property>
        <layout class="QVBoxLayout" name="chatLayout">
         <item>
+         <layout class="QHBoxLayout" name="chatHeaderLayout">
+          <item>
+           <spacer name="chatHeaderSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>0</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="chatReconnectButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Reconnect</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
          <widget class="QTextEdit" name="chatDisplay">
           <property name="readOnly">
            <bool>true</bool>
@@ -509,7 +536,7 @@
              <bool>false</bool>
             </property>
             <property name="placeholderText">
-             <string>Écrire un message...</string>
+             <string>Write a message...</string>
             </property>
            </widget>
           </item>
@@ -519,7 +546,7 @@
              <bool>false</bool>
             </property>
             <property name="text">
-             <string>Envoyer</string>
+             <string>Send</string>
             </property>
            </widget>
           </item>
@@ -540,8 +567,105 @@
      <height>21</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuTwitch">
+    <property name="title">
+     <string>Twitch</string>
+    </property>
+    <addaction name="actionLog_in"/>
+    <addaction name="actionDisconnect"/>
+    <addaction name="actionReconnect_Chat"/>
+   </widget>
+   <widget class="QMenu" name="menuTTS">
+    <property name="title">
+     <string>TTS</string>
+    </property>
+    <addaction name="actionReading"/>
+    <addaction name="actionSkip_messages"/>
+    <addaction name="actionSaturation"/>
+   </widget>
+   <widget class="QMenu" name="menuStream">
+    <property name="title">
+     <string>Stream</string>
+    </property>
+    <addaction name="actionLoad_from_Twitch"/>
+   </widget>
+   <widget class="QMenu" name="menuAbout">
+    <property name="title">
+     <string>About</string>
+    </property>
+    <addaction name="actionVersion"/>
+    <addaction name="separator"/>
+    <addaction name="actionAboutLutherTools"/>
+   </widget>
+   <addaction name="menuTwitch"/>
+   <addaction name="menuTTS"/>
+   <addaction name="menuStream"/>
+   <addaction name="menuAbout"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionLog_in">
+   <property name="text">
+    <string>Log in</string>
+   </property>
+  </action>
+  <action name="actionDisconnect">
+   <property name="visible">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Disconnect</string>
+   </property>
+  </action>
+  <action name="actionReconnect_Chat">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Reconnect (Chat)</string>
+   </property>
+  </action>
+  <action name="actionReading">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Reading</string>
+   </property>
+  </action>
+  <action name="actionSkip_messages">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Skip messages</string>
+   </property>
+  </action>
+  <action name="actionSaturation">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Saturation</string>
+   </property>
+  </action>
+  <action name="actionLoad_from_Twitch">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Load from Twitch</string>
+   </property>
+  </action>
+  <action name="actionAboutLutherTools">
+   <property name="text">
+    <string>About LutherTools</string>
+   </property>
+  </action>
+  <action name="actionVersion">
+   <property name="text">
+    <string>Version v0.0.0</string>
+   </property>
+  </action>
  </widget>
  <resources>
   <include location="ressources.qrc"/>

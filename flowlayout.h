@@ -1,11 +1,11 @@
 #ifndef FLOWLAYOUT_H
 #define FLOWLAYOUT_H
 
-// Layout qui aligne ses widgets horizontalement et passe à la ligne
-// automatiquement quand la largeur disponible est dépassée — utilisé pour
-// afficher les tags du stream sous forme de "chips" façon Twitch.
-// Adapté de l'exemple officiel Qt "Flow Layout"
-// (Qt Widgets Examples : Layouts/Flow Layout, licence BSD-3-Clause).
+// Layout that aligns its widgets horizontally and wraps to the next line
+// automatically when the available width is exceeded — used to display the
+// stream tags as Twitch-style "chips".
+// Adapted from the official Qt "Flow Layout" example
+// (Qt Widgets Examples: Layouts/Flow Layout, BSD-3-Clause license).
 
 #include <QLayout>
 #include <QRect>

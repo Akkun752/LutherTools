@@ -7,15 +7,15 @@
 #include <QWebSocket>
 #include <QTimer>
 
-// Client "one-shot" pour le service cloud edge-tts de Microsoft — le même
-// service que celui utilisé par read.py via la bibliothèque Python edge_tts.
-// Ouvre une connexion WebSocket, envoie la configuration puis le SSML,
-// récupère l'audio MP3 renvoyé par morceaux binaires, puis se ferme.
+// "One-shot" client for Microsoft's edge-tts cloud service — the same
+// service used by read.py via the Python edge_tts library.
+// Opens a WebSocket connection, sends the config then the SSML, collects the
+// MP3 audio returned as binary chunks, then closes.
 //
-// Protocole non documenté par Microsoft, sujet à changer sans préavis (le
-// jeton anti-bot Sec-MS-GEC est recalculé à chaque connexion, voir
-// generateSecMsGec()). Un objet est à usage unique : appeler synthesize()
-// une seule fois, il émet finished() ou failed() une seule fois.
+// Protocol undocumented by Microsoft, subject to change without notice (the
+// Sec-MS-GEC anti-bot token is recomputed on every connection, see
+// generateSecMsGec()). An object is single-use: call synthesize() only
+// once, it emits finished() or failed() exactly once.
 class EdgeTtsClient : public QObject
 {
     Q_OBJECT

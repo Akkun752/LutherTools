@@ -10,14 +10,14 @@
 class QNetworkAccessManager;
 class TwitchAuth;
 
-// Lecture/écriture du titre, de la catégorie et des tags du stream, via
-// l'API Helix (GET/PATCH https://api.twitch.tv/helix/channels), en
-// s'appuyant sur le token fourni par TwitchAuth.
+// Reads/writes the stream's title, category and tags via the Helix API
+// (GET/PATCH https://api.twitch.tv/helix/channels), using the token
+// provided by TwitchAuth.
 //
-// Le "message de notification de live" personnalisable dans le dashboard
-// Twitch n'est volontairement pas géré ici : Twitch n'expose aucune API pour
-// le lire ni l'écrire (confirmé par un modérateur Twitch sur le forum
-// développeur, cf. discuss.dev.twitch.com/t/set-the-notification-message-like-title-status/32343).
+// The customizable "go-live notification message" in the Twitch dashboard
+// is deliberately not handled here: Twitch exposes no API to read or write
+// it (confirmed by a Twitch moderator on the developer forum, see
+// discuss.dev.twitch.com/t/set-the-notification-message-like-title-status/32343).
 class TwitchChannel : public QObject
 {
     Q_OBJECT
@@ -26,14 +26,14 @@ public:
     explicit TwitchChannel(TwitchAuth *auth, QObject *parent = nullptr);
     ~TwitchChannel() override;
 
-    // Récupère titre/catégorie/tags actuels ; émet infoReceived() ou infoFailed().
+    // Fetches the current title/category/tags; emits infoReceived() or infoFailed().
     void fetchInfo();
 
-    // Met à jour le titre/la catégorie/les tags. gameId vide = catégorie
-    // inchangée (Twitch ignore le champ game_id s'il est omis).
+    // Updates the title/category/tags. Empty gameId = category left
+    // unchanged (Twitch ignores the game_id field when it's omitted).
     void updateInfo(const QString &title, const QString &gameId, const QStringList &tags);
 
-    // Recherche de catégories par nom (pour l'auto-complétion) ; émet categoriesFound().
+    // Searches categories by name (for autocompletion); emits categoriesFound().
     void searchCategories(const QString &query);
 
 signals:
@@ -42,7 +42,7 @@ signals:
     void infoFailed(const QString &reason);
     void updateSucceeded();
     void updateFailed(const QString &reason);
-    // Paires (nom, id), dans l'ordre renvoyé par Twitch (pertinence décroissante).
+    // (name, id) pairs, in the order returned by Twitch (decreasing relevance).
     void categoriesFound(const QVector<QPair<QString, QString>> &categories);
 
 private:

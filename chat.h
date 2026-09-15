@@ -5,15 +5,15 @@
 #include <QTcpSocket>
 #include <QString>
 
-// Connexion au chat Twitch en IRC et extraction des messages envoyés.
+// Connection to Twitch chat over IRC and extraction of sent messages.
 //
-// Équivalent de connect_to_twitch() / read_chat() / parse_message() dans
-// read.py, mais basé sur QTcpSocket : la lecture est pilotée par les signaux
-// Qt (readyRead), pas par une boucle bloquante dans un thread séparé.
+// Equivalent of read.py's connect_to_twitch() / read_chat() /
+// parse_message(), but based on QTcpSocket: reading is driven by Qt signals
+// (readyRead), not by a blocking loop in a separate thread.
 //
-// Si un token OAuth (avec les scopes chat:read/chat:edit) et un login sont
-// fournis, la connexion s'authentifie sous cette identité au lieu d'être
-// anonyme - ce qui permet aussi d'envoyer des messages via sendMessage().
+// If an OAuth token (with the chat:read/chat:edit scopes) and a login are
+// provided, the connection authenticates as that identity instead of being
+// anonymous - which also allows sending messages via sendMessage().
 class Chat : public QObject
 {
     Q_OBJECT
@@ -27,11 +27,15 @@ public:
     bool isConnected() const;
     void sendMessage(const QString &message);
 
+    // Closes the connection (if any) and reopens it. Safe to call whether
+    // currently connected, connecting, or already disconnected.
+    void reconnect();
+
 signals:
-    // Émis pour chaque message de chat reçu (équivalent du print + tts_queue.put de read.py).
+    // Emitted for every chat message received (equivalent of read.py's print + tts_queue.put).
     void messageReceived(const QString &username, const QString &message);
 
-    // Messages d'état (connexion, déconnexion, erreurs) - équivalent des print(...) de read.py.
+    // Status messages (connecting, disconnecting, errors) - equivalent of read.py's print(...).
     void statusChanged(const QString &status);
 
 private slots:
@@ -53,6 +57,7 @@ private:
     QString m_oauthToken;
     QTcpSocket m_socket;
     QString m_buffer;
+    bool m_reconnectPending = false;
 };
 
 #endif // CHAT_H

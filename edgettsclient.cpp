@@ -9,13 +9,12 @@
 
 namespace {
 
-// Constantes du protocole edge-tts (cf. rany2/edge-tts, constants.py).
-// TRUSTED_CLIENT_TOKEN est un jeton public utilisé par Edge lui-même pour la
-// fonctionnalité "Lire à voix haute" ; les versions Chromium ci-dessous
-// n'ont besoin d'être crédibles que pour le User-Agent / Sec-MS-GEC-Version,
-// pas d'être exactes en continu.
+// edge-tts protocol constants (cf. rany2/edge-tts, constants.py).
+// TRUSTED_CLIENT_TOKEN is a public token used by Edge itself for the
+// "Read aloud" feature; the Chromium versions below only need to look
+// plausible for the User-Agent / Sec-MS-GEC-Version, not stay exact forever.
 constexpr auto kTrustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
-constexpr qint64 kWinEpochSeconds = 11644473600LL; // secondes entre 1601-01-01 et 1970-01-01
+constexpr qint64 kWinEpochSeconds = 11644473600LL; // seconds between 1601-01-01 and 1970-01-01
 constexpr auto kChromiumMajorVersion = "143";
 constexpr auto kChromiumFullVersion = "143.0.3650.75";
 
@@ -33,13 +32,13 @@ EdgeTtsClient::EdgeTtsClient(QObject *parent)
     connect(&m_timeout, &QTimer::timeout, this, &EdgeTtsClient::onTimeout);
 }
 
-// Jeton anti-bot : SHA256(ticks_windows_arrondis_5min + TRUSTED_CLIENT_TOKEN), en majuscules.
+// Anti-bot token: SHA256(windows_ticks_rounded_5min + TRUSTED_CLIENT_TOKEN), uppercased.
 QString EdgeTtsClient::generateSecMsGec()
 {
     const qint64 unixSeconds = QDateTime::currentSecsSinceEpoch();
     qint64 ticks = unixSeconds + kWinEpochSeconds;
-    ticks -= ticks % 300; // arrondi au multiple de 5 minutes inférieur
-    const qint64 ticks100ns = ticks * 10'000'000LL; // secondes -> intervalles de 100ns
+    ticks -= ticks % 300; // round down to the nearest 5-minute multiple
+    const qint64 ticks100ns = ticks * 10'000'000LL; // seconds -> 100ns intervals
 
     const QString toHash = QString::number(ticks100ns) + QLatin1String(kTrustedClientToken);
     const QByteArray hash = QCryptographicHash::hash(toHash.toLatin1(), QCryptographicHash::Sha256);
@@ -105,8 +104,8 @@ void EdgeTtsClient::onConnected()
             .arg(timestamp);
     m_socket.sendTextMessage(configMessage);
 
-    // Note : QString::arg() ne traite pas "%%" comme un "%" littéral (contrairement à
-    // printf) ; les signes % de rate/volume sont donc écrits directement, pas doublés.
+    // Note: QString::arg() does not treat "%%" as a literal "%" (unlike
+    // printf), so the rate/volume percent signs are written plain, not doubled.
     const QString requestId = QUuid::createUuid().toString(QUuid::Id128);
     const QString ssml =
         QStringLiteral("<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='fr-FR'>"
@@ -128,8 +127,8 @@ void EdgeTtsClient::onTextMessageReceived(const QString &message)
 
 void EdgeTtsClient::onBinaryMessageReceived(const QByteArray &message)
 {
-    // Chaque message binaire commence par un en-tête texte (longueur sur 2
-    // octets big-endian, puis les en-têtes eux-mêmes) suivi des données MP3.
+    // Each binary message starts with a text header (2-byte big-endian
+    // length, then the headers themselves) followed by the MP3 data.
     if (message.size() < 2)
         return;
 
@@ -148,7 +147,7 @@ void EdgeTtsClient::onSocketError(QAbstractSocket::SocketError error)
 
 void EdgeTtsClient::onTimeout()
 {
-    failWith(QStringLiteral("Délai dépassé en attendant la réponse d'edge-tts"));
+    failWith(QStringLiteral("Timed out waiting for edge-tts's response"));
 }
 
 void EdgeTtsClient::finishWith(const QByteArray &data)

@@ -51,3 +51,5 @@ desktop.ini
 .DS_Store
 *.bak
 *.orig
+
+.gitcommands.txt
