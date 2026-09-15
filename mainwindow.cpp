@@ -37,18 +37,23 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle(QStringLiteral("LutherTools v%1").arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)));
 
-    // Message de marque permanent en bas de fenêtre. Un widget "permanent"
-    // (plutôt que showMessage()) reste affiché même quand un message
-    // transitoire (ex. échec de connexion Twitch) apparaît à côté.
+    // Permanent branding message at the bottom of the window. A "permanent"
+    // widget (rather than showMessage()) stays displayed even when a
+    // transient message (e.g. a failed Twitch login) appears next to it.
     auto *versionLabel = new QLabel(
         QStringLiteral("LutherTools v%1 - Flit Studio").arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)), this);
     ui->statusbar->addPermanentWidget(versionLabel);
 
-    // Connexion / Présets / Chat à parts strictement égales : même facteur
-    // d'étirement pour les 3, et une répartition explicite une fois la
-    // fenêtre réellement dimensionnée (avant show(), le splitter n'a pas
-    // encore sa largeur finale et se contente des tailles préférées de
-    // chaque volet, ce qui favorise celui qui a le plus de contrôles).
+    // "About" menu: purely informative entry (not connected to anything -
+    // clicking it does nothing), just showing the current version at a
+    // glance without opening the full About dialog.
+    ui->actionVersion->setText(tr("Version v%1").arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)));
+
+    // Connection / Presets / Chat in strictly equal thirds: same stretch
+    // factor for all 3, and an explicit split once the window actually has
+    // its real size (before show(), the splitter doesn't have its final
+    // width yet and just falls back to each pane's preferred size, which
+    // favors whichever has the most controls).
     ui->mainSplitter->setStretchFactor(0, 1);
     ui->mainSplitter->setStretchFactor(1, 1);
     ui->mainSplitter->setStretchFactor(2, 1);
@@ -60,23 +65,31 @@ MainWindow::MainWindow(QWidget *parent)
     m_network = new QNetworkAccessManager(this);
     m_tts = new TTS(this);
 
-    // Filtre "Lire 1 message sur N" : la case active/désactive le champ.
+    // "Read 1 message out of N" filter: the checkbox enables/disables the field.
     connect(ui->readEveryNCheckBox, &QCheckBox::toggled, ui->readEveryNSpinBox, &QSpinBox::setEnabled);
     connect(ui->readEveryNCheckBox, &QCheckBox::toggled, m_tts, &TTS::setReadEveryNEnabled);
     connect(ui->readEveryNSpinBox, &QSpinBox::valueChanged, m_tts, &TTS::setReadEveryN);
 
-    // Filtre "Saturation aléatoire" : la case active/désactive les deux champs.
+    // "Random saturation" filter: the checkbox enables/disables both fields.
     connect(ui->saturationCheckBox, &QCheckBox::toggled, ui->saturationFactorSpinBox, &QSpinBox::setEnabled);
     connect(ui->saturationCheckBox, &QCheckBox::toggled, ui->saturationChanceSpinBox, &QSpinBox::setEnabled);
     connect(ui->saturationCheckBox, &QCheckBox::toggled, m_tts, &TTS::setSaturationEnabled);
     connect(ui->saturationFactorSpinBox, &QSpinBox::valueChanged, m_tts, &TTS::setSaturationFactor);
     connect(ui->saturationChanceSpinBox, &QSpinBox::valueChanged, m_tts, &TTS::setSaturationChancePercent);
 
-    // Charge les préférences sauvegardées (le cas échéant) : les connexions
-    // ci-dessus étant déjà en place, les valeurs chargées se répercutent tout
-    // de suite sur m_tts. Les connexions de sauvegarde automatique ne sont
-    // branchées qu'après, pour ne pas ré-écrire le fichier avec les mêmes
-    // valeurs qu'on vient d'y lire.
+    // TTS menu (Twitch/TTS/Stream/About menu bar): the checkable actions are
+    // just another way to toggle the same checkboxes, kept in sync both ways.
+    connect(ui->ttsCheckBox, &QCheckBox::toggled, ui->actionReading, &QAction::setChecked);
+    connect(ui->actionReading, &QAction::toggled, ui->ttsCheckBox, &QCheckBox::setChecked);
+    connect(ui->readEveryNCheckBox, &QCheckBox::toggled, ui->actionSkip_messages, &QAction::setChecked);
+    connect(ui->actionSkip_messages, &QAction::toggled, ui->readEveryNCheckBox, &QCheckBox::setChecked);
+    connect(ui->saturationCheckBox, &QCheckBox::toggled, ui->actionSaturation, &QAction::setChecked);
+    connect(ui->actionSaturation, &QAction::toggled, ui->saturationCheckBox, &QCheckBox::setChecked);
+
+    // Loads saved preferences (if any): since the connections above are
+    // already in place, the loaded values immediately propagate to m_tts.
+    // The auto-save connections are only wired up afterwards, so as not to
+    // rewrite the file with the same values just read from it.
     loadSettings();
 
     connect(ui->ttsCheckBox, &QCheckBox::toggled, this, &MainWindow::saveSettings);
@@ -86,18 +99,27 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->saturationFactorSpinBox, &QSpinBox::valueChanged, this, &MainWindow::saveSettings);
     connect(ui->saturationChanceSpinBox, &QSpinBox::valueChanged, this, &MainWindow::saveSettings);
 
-    // Connexion Twitch (OAuth "device code") : c'est elle qui pilote la
-    // lecture du chat (démarrée automatiquement une fois authentifié, qu'il
-    // s'agisse d'une connexion fraîche ou d'une session restaurée), plus
-    // besoin de saisir un nom de chaîne à la main.
+    // Twitch login (OAuth "device code"): it drives chat reading (started
+    // automatically once authenticated, whether it's a fresh login or a
+    // restored session), no need to type a channel name by hand anymore.
     m_twitchAuth = new TwitchAuth(this);
     connect(ui->twitchLoginButton, &QPushButton::clicked, this, &MainWindow::onTwitchLoginButtonClicked);
     connect(m_twitchAuth, &TwitchAuth::authenticated, this, &MainWindow::onTwitchAuthenticated);
     connect(m_twitchAuth, &TwitchAuth::authFailed, this, &MainWindow::onTwitchAuthFailed);
     connect(m_twitchAuth, &TwitchAuth::loggedOut, this, &MainWindow::onTwitchLoggedOut);
 
-    // Infos du stream (titre/catégorie/tags) : lecture/écriture via l'API
-    // Helix, activées uniquement une fois connecté à Twitch.
+    // Twitch menu: both items drive the same toggle logic as the button
+    // (log in if logged out, disconnect if logged in) - only one of the two
+    // is ever visible at a time (see onTwitchAuthenticated/onTwitchLoggedOut).
+    // Reconnect (Chat) is left unconnected for now, no such feature exists yet.
+    connect(ui->actionLog_in, &QAction::triggered, this, &MainWindow::onTwitchLoginButtonClicked);
+    connect(ui->actionDisconnect, &QAction::triggered, this, &MainWindow::onTwitchLoginButtonClicked);
+
+    // About menu.
+    connect(ui->actionAboutLutherTools, &QAction::triggered, this, &MainWindow::onAboutActionTriggered);
+
+    // Stream info (title/category/tags): read/write via the Helix API,
+    // enabled only once connected to Twitch.
     m_twitchChannel = new TwitchChannel(m_twitchAuth, this);
     connect(m_twitchChannel, &TwitchChannel::infoReceived, this, &MainWindow::onStreamInfoReceived);
     connect(m_twitchChannel, &TwitchChannel::infoFailed, this, &MainWindow::onStreamInfoFailed);
@@ -106,6 +128,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_twitchChannel, &TwitchChannel::categoriesFound, this, &MainWindow::onCategoriesFound);
 
     connect(ui->streamFetchButton, &QPushButton::clicked, this, &MainWindow::onStreamFetchButtonClicked);
+    // Stream menu: same action as the "Load from Twitch" button.
+    connect(ui->actionLoad_from_Twitch, &QAction::triggered, this, &MainWindow::onStreamFetchButtonClicked);
     connect(ui->streamSaveButton, &QPushButton::clicked, this, &MainWindow::onStreamSaveButtonClicked);
     connect(ui->streamCategoryEdit, &QLineEdit::textEdited, this, &MainWindow::onStreamCategoryTextEdited);
     connect(ui->streamTagsInputEdit, &QLineEdit::returnPressed, this, &MainWindow::onStreamTagInputReturnPressed);
@@ -115,42 +139,46 @@ MainWindow::MainWindow(QWidget *parent)
     m_categoryCompleter->setCaseSensitivity(Qt::CaseInsensitive);
     ui->streamCategoryEdit->setCompleter(m_categoryCompleter);
 
-    // Tags façon Twitch : des "chips" qui s'enchaînent et passent à la ligne
-    // (FlowLayout), le champ texte ne servant qu'à en ajouter un nouveau.
+    // Twitch-style tags: "chips" that flow and wrap to the next line
+    // (FlowLayout), the text field only being used to add a new one.
     m_tagsFlowLayout = new FlowLayout(ui->streamTagsChipsWidget, 0, 6, 6);
 
-    // Présets de configuration de stream : purement locaux, indépendants de
-    // Twitch (chargés dès le lancement, pas seulement une fois connecté).
-    // Chaque préset de la liste a ses propres boutons (info/charger/supprimer),
-    // construits dynamiquement dans refreshPresetList().
+    // Stream configuration presets: purely local, independent of Twitch
+    // (loaded right at launch, not only once connected). Each preset in the
+    // list has its own buttons (info/load/delete), built dynamically in
+    // refreshPresetList().
     connect(ui->presetSaveButton, &QPushButton::clicked, this, &MainWindow::onPresetSaveButtonClicked);
     loadPresets();
 
-    // Envoi de messages dans le chat, en tant que la chaîne connectée.
+    // Sending messages in chat, as the connected channel.
     connect(ui->chatSendButton, &QPushButton::clicked, this, &MainWindow::onChatSendButtonClicked);
     connect(ui->chatSendEdit, &QLineEdit::returnPressed, this, &MainWindow::onChatSendButtonClicked);
+
+    // Reconnecting the chat: same action, whether triggered from the button
+    // above the chat panel or from the Twitch menu.
+    connect(ui->chatReconnectButton, &QPushButton::clicked, this, &MainWindow::onChatReconnectButtonClicked);
+    connect(ui->actionReconnect_Chat, &QAction::triggered, this, &MainWindow::onChatReconnectButtonClicked);
 
     m_twitchAuth->restoreSession();
 }
 
 MainWindow::~MainWindow()
 {
-    // m_network peut avoir une requête en cours (le téléchargement de
-    // l'avatar Twitch, typiquement) au moment de la fermeture. Si on laisse
-    // le nettoyage implicite d'QObject s'en charger, il n'arrive qu'après le
-    // corps de ce destructeur (donc après "delete ui" plus bas) : sa
-    // suppression peut alors déclencher le signal finished() du reply en
-    // cours de façon synchrone (connexion directe, même thread), et le lambda
-    // connecté toucherait ui->twitchAvatarLabel alors qu'il est déjà détruit
-    // -> "destructor may have already run". On le supprime donc en premier,
-    // tant que ui est encore valide.
+    // m_network may have a request in flight (typically the Twitch avatar
+    // download) at the time of closing. If QObject's implicit cleanup is
+    // left to handle it, that only happens after this destructor's body
+    // (i.e. after "delete ui" below): deleting it then could synchronously
+    // trigger the in-flight reply's finished() signal (direct connection,
+    // same thread), and the connected lambda would touch
+    // ui->twitchAvatarLabel while it's already destroyed -> "destructor may
+    // have already run". So it's deleted first, while ui is still valid.
     //
-    // Même souci, de façon indirecte, avec les objets enfants (TwitchAuth
-    // surtout, avec sa propre requête réseau possible en cours) : leur
-    // destruction implicite par QObject n'intervient elle aussi qu'après ce
-    // destructeur, et peut encore émettre un signal (authFailed, etc.) qui
-    // atteindrait un de nos slots touchant ui. On coupe donc d'abord toute
-    // connexion des enfants vers nous.
+    // Same issue, indirectly, with child objects (TwitchAuth especially,
+    // with its own possible in-flight network request): their implicit
+    // destruction by QObject also only happens after this destructor, and
+    // could still emit a signal (authFailed, etc.) that would reach one of
+    // our slots touching ui. So every connection from children back to us
+    // is cut first.
     if (m_twitchAuth)
         m_twitchAuth->disconnect(this);
     if (m_twitchChannel)
@@ -223,9 +251,9 @@ void MainWindow::onChatMessageReceived(const QString &username, const QString &m
 
 void MainWindow::onChatStatusChanged(const QString &status)
 {
-    // Déjà visible dans le panneau Chat lui-même (ligne ci-dessous) : la barre
-    // de statut, elle, reste dédiée au message de marque permanent (cf.
-    // constructeur) plutôt qu'à ces statuts transitoires.
+    // Already visible in the Chat panel itself (line below): the status bar
+    // stays dedicated to the permanent branding message (see constructor)
+    // rather than these transient statuses.
     ui->chatDisplay->append(QStringLiteral("<i>%1</i>").arg(status.toHtmlEscaped()));
 }
 
@@ -237,13 +265,19 @@ void MainWindow::onChatSendButtonClicked()
 
     m_chat->sendMessage(message);
 
-    // Le serveur IRC de Twitch n'échoue pas nos propres messages : on simule
-    // leur réception via le même chemin que n'importe quel autre message
-    // (affichage + lecture TTS si activée), pour un comportement identique à
-    // un message envoyé depuis Twitch directement.
+    // Twitch's IRC server doesn't echo our own messages back: their receipt
+    // is simulated via the same path as any other message (display + TTS
+    // reading if enabled), for behavior identical to a message sent from
+    // Twitch directly.
     onChatMessageReceived(m_twitchAuth->login(), message);
 
     ui->chatSendEdit->clear();
+}
+
+void MainWindow::onChatReconnectButtonClicked()
+{
+    if (m_chat)
+        m_chat->reconnect();
 }
 
 void MainWindow::onTwitchLoginButtonClicked()
@@ -263,7 +297,10 @@ void MainWindow::onTwitchAuthenticated(const QString &login, const QString &disp
                                         const QString &avatarUrl)
 {
     ui->twitchLoginButton->setEnabled(true);
-    ui->twitchLoginButton->setText(tr("Déconnecter Twitch (%1)").arg(login));
+    ui->twitchLoginButton->setText(tr("Disconnect Twitch (%1)").arg(login));
+
+    ui->actionLog_in->setVisible(false);
+    ui->actionDisconnect->setVisible(true);
 
     ui->twitchDisplayNameLabel->setText(displayName);
     ui->twitchDisplayNameLabel->setVisible(true);
@@ -283,11 +320,11 @@ void MainWindow::onTwitchAuthenticated(const QString &login, const QString &disp
         });
     }
 
-    // La lecture du chat démarre automatiquement avec la chaîne authentifiée.
-    // L'envoi de messages nécessite le scope chat:edit : une session plus
-    // ancienne (connectée avant son ajout) ne l'a pas forcément encore -> on
-    // se rabat sur une connexion anonyme (lecture seule, comme avant) plutôt
-    // que de risquer une connexion IRC rejetée par Twitch.
+    // Chat reading starts automatically with the authenticated channel.
+    // Sending messages requires the chat:edit scope: an older session
+    // (logged in before it was added) might not have it yet -> falls back
+    // to an anonymous connection (read-only, as before) rather than risking
+    // an IRC connection rejected by Twitch.
     const bool canSendChat = m_twitchAuth->hasScope(QStringLiteral("chat:edit"));
     if (canSendChat)
         attachChat(new Chat(login, login, m_twitchAuth->accessToken(), this));
@@ -295,11 +332,17 @@ void MainWindow::onTwitchAuthenticated(const QString &login, const QString &disp
         attachChat(new Chat(login, QString(), QString(), this));
     m_chat->connectToChat();
 
+    // Reconnecting doesn't need the chat:edit scope (it works the same for
+    // an anonymous, read-only connection), so it's enabled regardless of
+    // canSendChat.
+    ui->chatReconnectButton->setEnabled(true);
+    ui->actionReconnect_Chat->setEnabled(true);
+
     ui->chatSendEdit->setEnabled(canSendChat);
     ui->chatSendButton->setEnabled(canSendChat);
     if (!canSendChat) {
-        ui->chatDisplay->append(tr("<i>Reconnecte-toi à Twitch pour pouvoir écrire dans le chat "
-                                    "(autorisation supplémentaire nécessaire).</i>"));
+        ui->chatDisplay->append(tr("<i>Reconnect to Twitch to be able to write in chat "
+                                    "(additional authorization required).</i>"));
     }
 
     setStreamInfoEnabled(true);
@@ -315,9 +358,16 @@ void MainWindow::onTwitchAuthFailed(const QString &reason)
 void MainWindow::onTwitchLoggedOut()
 {
     ui->twitchLoginButton->setEnabled(true);
-    ui->twitchLoginButton->setText(tr("Se connecter avec Twitch"));
+    ui->twitchLoginButton->setText(tr("Log in with Twitch"));
+
+    ui->actionLog_in->setVisible(true);
+    ui->actionDisconnect->setVisible(false);
+
     ui->twitchDisplayNameLabel->setVisible(false);
     ui->twitchAvatarLabel->setVisible(false);
+
+    ui->chatReconnectButton->setEnabled(false);
+    ui->actionReconnect_Chat->setEnabled(false);
 
     ui->chatSendEdit->setEnabled(false);
     ui->chatSendEdit->clear();
@@ -333,11 +383,12 @@ void MainWindow::setStreamInfoEnabled(bool enabled)
     ui->streamTagsInputEdit->setEnabled(enabled);
     ui->streamFetchButton->setEnabled(enabled);
     ui->streamSaveButton->setEnabled(enabled);
+    ui->actionLoad_from_Twitch->setEnabled(enabled);
 
-    // Les présets ne servent qu'à remplir les champs ci-dessus, eux-mêmes
-    // inutilisables hors connexion : on suit donc le même état. La liste
-    // enregistrée localement (m_presets) n'est en revanche pas vidée, elle
-    // reste disponible à la prochaine connexion.
+    // Presets only serve to fill in the fields above, themselves unusable
+    // while logged out: so they follow the same state. The locally saved
+    // list (m_presets), however, is not cleared - it stays available for
+    // the next login.
     ui->presetListScrollArea->setEnabled(enabled);
     ui->presetNameEdit->setEnabled(enabled);
     ui->presetSaveButton->setEnabled(enabled);
@@ -383,24 +434,24 @@ void MainWindow::onStreamInfoReceived(const QString &title, const QString &gameN
 
 void MainWindow::onStreamInfoFailed(const QString &reason)
 {
-    ui->streamStatusLabel->setText(tr("Échec du chargement : %1").arg(reason));
+    ui->streamStatusLabel->setText(tr("Failed to load: %1").arg(reason));
 }
 
 void MainWindow::onStreamUpdateSucceeded()
 {
     ui->streamSaveButton->setEnabled(true);
-    ui->streamStatusLabel->setText(tr("Enregistré sur Twitch."));
+    ui->streamStatusLabel->setText(tr("Saved to Twitch."));
 }
 
 void MainWindow::onStreamUpdateFailed(const QString &reason)
 {
     ui->streamSaveButton->setEnabled(true);
-    ui->streamStatusLabel->setText(tr("Échec de l'enregistrement : %1").arg(reason));
+    ui->streamStatusLabel->setText(tr("Failed to save: %1").arg(reason));
 }
 
 void MainWindow::onStreamFetchButtonClicked()
 {
-    ui->streamStatusLabel->setText(tr("Chargement..."));
+    ui->streamStatusLabel->setText(tr("Loading..."));
     m_twitchChannel->fetchInfo();
 }
 
@@ -408,30 +459,31 @@ void MainWindow::onStreamSaveButtonClicked()
 {
     const QString title = ui->streamTitleEdit->text().trimmed();
     if (title.isEmpty()) {
-        ui->streamStatusLabel->setText(tr("Le titre ne peut pas être vide."));
+        ui->streamStatusLabel->setText(tr("The title can't be empty."));
         return;
     }
 
-    // Les tags sont déjà validés (longueur, nombre) au moment de leur ajout
-    // sous forme de chips : m_currentTags est directement utilisable.
+    // Tags are already validated (length, count) when added as chips:
+    // m_currentTags can be used directly.
     const QStringList &tags = m_currentTags;
 
-    // Catégorie : laissée inchangée côté Twitch si le champ est vide ; sinon
-    // il faut la résoudre en game_id parmi les noms déjà vus (chargement
-    // initial + résultats de recherche), Twitch n'acceptant pas un nom brut.
+    // Category: left unchanged on Twitch's side if the field is empty;
+    // otherwise it needs to be resolved into a game_id among the names
+    // already seen (initial load + search results), since Twitch doesn't
+    // accept a raw name.
     const QString categoryText = ui->streamCategoryEdit->text().trimmed();
     QString gameId;
     if (!categoryText.isEmpty()) {
         gameId = resolveCategoryId(categoryText);
         if (gameId.isEmpty()) {
             ui->streamStatusLabel->setText(
-                tr("Catégorie \"%1\" non reconnue : choisis-la dans la liste proposée.").arg(categoryText));
+                tr("Category \"%1\" not recognized: pick it from the suggested list.").arg(categoryText));
             return;
         }
     }
 
     ui->streamSaveButton->setEnabled(false);
-    ui->streamStatusLabel->setText(tr("Enregistrement..."));
+    ui->streamStatusLabel->setText(tr("Saving..."));
     m_twitchChannel->updateInfo(title, gameId, tags);
 }
 
@@ -439,8 +491,8 @@ void MainWindow::onStreamCategoryTextEdited(const QString &text)
 {
     Q_UNUSED(text);
 
-    // Anti-rebond : on ne lance la recherche Twitch qu'une fois la frappe
-    // marquée une pause, pas à chaque caractère tapé.
+    // Debounce: the Twitch search only fires once typing has paused, not on
+    // every keystroke.
     if (!m_categorySearchTimer) {
         m_categorySearchTimer = new QTimer(this);
         m_categorySearchTimer->setSingleShot(true);
@@ -474,7 +526,7 @@ void MainWindow::addTag(const QString &rawTag)
         return;
 
     if (tag.size() > 25) {
-        ui->streamStatusLabel->setText(tr("Le tag \"%1\" dépasse 25 caractères.").arg(tag));
+        ui->streamStatusLabel->setText(tr("The tag \"%1\" is over 25 characters.").arg(tag));
         return;
     }
     if (m_currentTags.contains(tag, Qt::CaseInsensitive))
@@ -532,7 +584,7 @@ void MainWindow::onPresetSaveButtonClicked()
 {
     const QString name = ui->presetNameEdit->text().trimmed();
     if (name.isEmpty()) {
-        ui->streamStatusLabel->setText(tr("Le nom du préset ne peut pas être vide."));
+        ui->streamStatusLabel->setText(tr("The preset name can't be empty."));
         return;
     }
 
@@ -543,14 +595,14 @@ void MainWindow::onPresetSaveButtonClicked()
     preset.gameId = preset.gameName.isEmpty() ? QString() : resolveCategoryId(preset.gameName);
     preset.tags = m_currentTags;
 
-    // Un préset du même nom (insensible à la casse) est mis à jour plutôt que
-    // dupliqué.
+    // A preset with the same name (case-insensitive) is updated rather than
+    // duplicated.
     const int existingIndex = presetIndexByName(name);
     if (existingIndex >= 0) {
         m_presets[existingIndex] = preset;
     } else {
         if (m_presets.size() >= kMaxPresets) {
-            ui->streamStatusLabel->setText(tr("%1 présets maximum.").arg(kMaxPresets));
+            ui->streamStatusLabel->setText(tr("%1 presets maximum.").arg(kMaxPresets));
             return;
         }
         m_presets.append(preset);
@@ -559,7 +611,7 @@ void MainWindow::onPresetSaveButtonClicked()
     savePresets();
     refreshPresetList();
     ui->presetNameEdit->clear();
-    ui->streamStatusLabel->setText(tr("Préset \"%1\" enregistré.").arg(name));
+    ui->streamStatusLabel->setText(tr("Preset \"%1\" saved.").arg(name));
 }
 
 int MainWindow::presetIndexByName(const QString &name) const
@@ -584,15 +636,15 @@ void MainWindow::loadPreset(const QString &name)
     m_currentTags = preset.tags;
     rebuildTagChips();
 
-    // Si le préset connaît déjà le game_id de sa catégorie, on le réinjecte
-    // pour qu'un "Enregistrer sur Twitch" immédiat n'ait pas besoin d'une
-    // nouvelle recherche pour la résoudre.
+    // If the preset already knows its category's game_id, it's reinjected
+    // so an immediate "Save to Twitch" doesn't need a fresh search to
+    // resolve it.
     if (!preset.gameName.isEmpty() && !preset.gameId.isEmpty()) {
         m_categoryIdByName.insert(preset.gameName, preset.gameId);
         m_currentGameId = preset.gameId;
     }
 
-    ui->streamStatusLabel->setText(tr("Préset \"%1\" chargé.").arg(preset.name));
+    ui->streamStatusLabel->setText(tr("Preset \"%1\" loaded.").arg(preset.name));
 }
 
 void MainWindow::deletePreset(const QString &name)
@@ -601,15 +653,15 @@ void MainWindow::deletePreset(const QString &name)
     if (index < 0)
         return;
 
-    // Suppression irréversible : demande confirmation, avec des boutons en
-    // français (ceux d'un QMessageBox standard suivent la locale système,
-    // souvent en anglais).
+    // Irreversible deletion: asks for confirmation, with explicit button
+    // text (a standard QMessageBox's buttons follow the system locale,
+    // which might not match the app's).
     QMessageBox confirm(this);
-    confirm.setWindowTitle(tr("Supprimer le préset"));
-    confirm.setText(tr("Supprimer le préset \"%1\" ? Cette action est irréversible.").arg(name));
+    confirm.setWindowTitle(tr("Delete preset"));
+    confirm.setText(tr("Delete the preset \"%1\"? This action is irreversible.").arg(name));
     confirm.setIcon(QMessageBox::Warning);
-    QPushButton *deleteButton = confirm.addButton(tr("Supprimer"), QMessageBox::DestructiveRole);
-    confirm.addButton(tr("Annuler"), QMessageBox::RejectRole);
+    QPushButton *deleteButton = confirm.addButton(tr("Delete"), QMessageBox::DestructiveRole);
+    confirm.addButton(tr("Cancel"), QMessageBox::RejectRole);
     confirm.exec();
     if (confirm.clickedButton() != deleteButton)
         return;
@@ -625,51 +677,51 @@ void MainWindow::showPresetInfoDialog(const QString &name)
     if (index < 0)
         return;
 
-    // Copie de travail : les modifications ne touchent m_presets qu'une fois
-    // validées (bouton "Enregistrer" de la micro pop-up).
+    // Working copy: changes only touch m_presets once validated (the
+    // "Save" button on the micro pop-up).
     StreamPreset preset = m_presets.at(index);
 
     QDialog dialog(this);
-    dialog.setWindowTitle(tr("Préset : %1").arg(preset.name));
+    dialog.setWindowTitle(tr("Preset: %1").arg(preset.name));
 
     auto *layout = new QVBoxLayout(&dialog);
 
-    layout->addWidget(new QLabel(tr("Nom"), &dialog));
+    layout->addWidget(new QLabel(tr("Name"), &dialog));
     auto *nameEdit = new QLineEdit(preset.name, &dialog);
     layout->addWidget(nameEdit);
 
-    layout->addWidget(new QLabel(tr("Titre"), &dialog));
+    layout->addWidget(new QLabel(tr("Title"), &dialog));
     auto *titleEdit = new QLineEdit(preset.title, &dialog);
     titleEdit->setMaxLength(140);
     layout->addWidget(titleEdit);
 
-    layout->addWidget(new QLabel(tr("Catégorie"), &dialog));
+    layout->addWidget(new QLabel(tr("Category"), &dialog));
     auto *categoryEdit = new QLineEdit(preset.gameName, &dialog);
     layout->addWidget(categoryEdit);
 
-    layout->addWidget(new QLabel(tr("Tags (séparés par des virgules)"), &dialog));
+    layout->addWidget(new QLabel(tr("Tags (comma-separated)"), &dialog));
     auto *tagsEdit = new QLineEdit(preset.tags.join(QStringLiteral(", ")), &dialog);
     layout->addWidget(tagsEdit);
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
-    // QDialogButtonBox traduit ses boutons standards selon la locale système
-    // (souvent en anglais ici) : on force un texte cohérent avec le reste de
-    // l'interface, en français.
-    buttonBox->button(QDialogButtonBox::Save)->setText(tr("Enregistrer"));
-    buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("Annuler"));
+    // QDialogButtonBox translates its standard buttons according to the
+    // system locale: explicit text keeps it consistent with the rest of
+    // the interface.
+    buttonBox->button(QDialogButtonBox::Save)->setText(tr("Save"));
+    buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("Cancel"));
     layout->addWidget(buttonBox);
 
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, [&]() {
         const QString newName = nameEdit->text().trimmed();
         if (newName.isEmpty()) {
-            QMessageBox::warning(&dialog, tr("Préset"), tr("Le nom du préset ne peut pas être vide."));
+            QMessageBox::warning(&dialog, tr("Preset"), tr("The preset name can't be empty."));
             return;
         }
         const int conflictIndex = presetIndexByName(newName);
         if (conflictIndex >= 0 && conflictIndex != index) {
-            QMessageBox::warning(&dialog, tr("Préset"),
-                                  tr("Un préset nommé \"%1\" existe déjà.").arg(newName));
+            QMessageBox::warning(&dialog, tr("Preset"),
+                                  tr("A preset named \"%1\" already exists.").arg(newName));
             return;
         }
 
@@ -680,14 +732,14 @@ void MainWindow::showPresetInfoDialog(const QString &name)
             if (tag.isEmpty())
                 continue;
             if (tag.size() > 25) {
-                QMessageBox::warning(&dialog, tr("Préset"),
-                                      tr("Le tag \"%1\" dépasse 25 caractères.").arg(tag));
+                QMessageBox::warning(&dialog, tr("Preset"),
+                                      tr("The tag \"%1\" is over 25 characters.").arg(tag));
                 return;
             }
             tags << tag;
         }
         if (tags.size() > 10) {
-            QMessageBox::warning(&dialog, tr("Préset"), tr("10 tags maximum (%1 fournis).").arg(tags.size()));
+            QMessageBox::warning(&dialog, tr("Preset"), tr("10 tags maximum (%1 given).").arg(tags.size()));
             return;
         }
 
@@ -695,8 +747,8 @@ void MainWindow::showPresetInfoDialog(const QString &name)
         preset.name = newName;
         preset.title = titleEdit->text();
         preset.gameName = newGameName;
-        // Catégorie inchangée : on garde le game_id déjà connu plutôt que de
-        // le perdre (une nouvelle résolution nécessiterait une recherche).
+        // Category unchanged: keep the already-known game_id instead of
+        // losing it (a fresh resolution would require a search).
         preset.gameId = newGameName.compare(m_presets.at(index).gameName, Qt::CaseInsensitive) == 0
                              ? m_presets.at(index).gameId
                              : resolveCategoryId(newGameName);
@@ -762,12 +814,12 @@ void MainWindow::savePresets()
 
 void MainWindow::refreshPresetList()
 {
-    // Un simple QVBoxLayout dans une QScrollArea plutôt qu'un QListWidget +
-    // setItemWidget() : ce dernier ne recalculait la largeur de chaque ligne
-    // (et donc la position de la croix de suppression, tout à droite) qu'au
-    // premier redimensionnement réel du widget - jamais au remplissage
-    // initial, même différé. Un layout "normal" comme celui-ci est géré par
-    // le mécanisme de layout standard de Qt et n'a pas ce défaut.
+    // A plain QVBoxLayout in a QScrollArea rather than a QListWidget +
+    // setItemWidget(): the latter would only recompute each row's width
+    // (and thus the delete cross's position, all the way to the right) on
+    // the widget's first real resize - never on the initial fill, even
+    // deferred. A "normal" layout like this one is handled by Qt's standard
+    // layout mechanism and doesn't have that flaw.
     QLayoutItem *oldItem;
     while ((oldItem = ui->presetListContentLayout->takeAt(0)) != nullptr) {
         delete oldItem->widget();
@@ -791,21 +843,21 @@ void MainWindow::refreshPresetList()
 
         auto *infoButton = new QToolButton(row);
         infoButton->setText(QStringLiteral("i"));
-        infoButton->setToolTip(tr("Voir / modifier les infos du préset"));
+        infoButton->setToolTip(tr("View / edit the preset's info"));
         infoButton->setStyleSheet(buttonStyle);
         connect(infoButton, &QToolButton::clicked, this, [this, name]() { showPresetInfoDialog(name); });
         rowLayout->addWidget(infoButton);
 
         auto *loadButton = new QToolButton(row);
-        loadButton->setText(tr("Charger"));
+        loadButton->setText(tr("Load"));
         loadButton->setStyleSheet(buttonStyle);
         connect(loadButton, &QToolButton::clicked, this, [this, name]() { loadPreset(name); });
         rowLayout->addWidget(loadButton);
 
-        // Croix de suppression, même style que sur les tags.
+        // Delete cross, same style as on the tags.
         auto *deleteButton = new QToolButton(row);
         deleteButton->setText(QStringLiteral("×"));
-        deleteButton->setToolTip(tr("Supprimer le préset"));
+        deleteButton->setToolTip(tr("Delete the preset"));
         deleteButton->setCursor(Qt::PointingHandCursor);
         deleteButton->setStyleSheet(QStringLiteral(
             "QToolButton { color: #333333; background: transparent; border: none; font-weight: bold; }"
@@ -817,4 +869,21 @@ void MainWindow::refreshPresetList()
     }
 
     ui->presetListContentLayout->addStretch();
+}
+
+void MainWindow::onAboutActionTriggered()
+{
+    // To credit someone else or for a new area of the app, add a line here:
+    // either a new "<br>role" under an existing person's <b>Name</b> block,
+    // or a whole new "<p><b>Name</b><br>role</p>" block for a new person.
+    QMessageBox::about(
+        this, tr("About LutherTools"),
+        tr("<h3>LutherTools v%1</h3>"
+           "<p><b>Corentin BOUTIGNY</b><br>"
+           "Twitch connection<br>"
+           "TTS<br>"
+           "Presets</p>"
+           "<p><b>Benjamin DESCOURS--TERRIER</b><br>"
+           "Linux port</p>")
+            .arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)));
 }

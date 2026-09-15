@@ -9,8 +9,8 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
-    // Identifie l'appli pour QSettings/QStandardPaths (fichier de préférences
-    // dans %APPDATA%/Akkun7/LutherTools.ini, voir MainWindow::settingsFilePath()).
+    // Identifies the app for QSettings/QStandardPaths (preferences file in
+    // %APPDATA%/FlitStudio/LutherTools.ini, see appSettingsFilePath()).
     QCoreApplication::setOrganizationName(QStringLiteral("FlitStudio"));
     QCoreApplication::setApplicationName(QStringLiteral("LutherTools"));
     QCoreApplication::setApplicationVersion(QStringLiteral(LUTHERTOOLS_VERSION_STRING));

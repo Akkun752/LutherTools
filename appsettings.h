@@ -3,8 +3,8 @@
 
 #include <QString>
 
-// Chemin du fichier local de préférences (créé si besoin), partagé par
-// MainWindow (réglages UI) et TwitchAuth (tokens).
+// Path of the local preferences file (created if needed), shared by
+// MainWindow (UI settings) and TwitchAuth (tokens).
 QString appSettingsFilePath();
 
 #endif // APPSETTINGS_H

@@ -24,8 +24,8 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
-// Un préset de configuration de stream (titre/catégorie/tags), enregistré
-// localement pour pouvoir y re-switcher rapidement.
+// A stream configuration preset (title/category/tags), saved locally so it
+// can be switched back to quickly.
 struct StreamPreset
 {
     QString name;
@@ -50,6 +50,7 @@ private slots:
     void onChatMessageReceived(const QString &username, const QString &message);
     void onChatStatusChanged(const QString &status);
     void onChatSendButtonClicked();
+    void onChatReconnectButtonClicked();
     void onTwitchLoginButtonClicked();
     void onTwitchAuthenticated(const QString &login, const QString &displayName, const QString &avatarUrl);
     void onTwitchAuthFailed(const QString &reason);
@@ -65,6 +66,7 @@ private slots:
     void onCategoriesFound(const QVector<QPair<QString, QString>> &categories);
     void onStreamTagInputReturnPressed();
     void onPresetSaveButtonClicked();
+    void onAboutActionTriggered();
 
 private:
     void attachChat(Chat *chat);

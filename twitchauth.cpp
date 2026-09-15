@@ -16,11 +16,11 @@
 
 namespace {
 
-// channel:manage:broadcast : lecture/modification du titre, de la catégorie
-// et des tags du stream (API Helix GET/PATCH /channels).
-// chat:read / chat:edit : connexion IRC authentifiée (au lieu d'anonyme),
-// nécessaire pour pouvoir envoyer des messages dans le chat en tant que la
-// chaîne connectée.
+// channel:manage:broadcast: reading/editing the stream's title, category
+// and tags (Helix GET/PATCH /channels API).
+// chat:read / chat:edit: authenticated IRC connection (instead of
+// anonymous), needed to be able to send messages in chat as the connected
+// channel.
 constexpr auto kScopes = "channel:manage:broadcast chat:read chat:edit";
 
 } // namespace
@@ -34,14 +34,14 @@ TwitchAuth::TwitchAuth(QObject *parent)
 
 TwitchAuth::~TwitchAuth()
 {
-    // Une requête peut être en cours (poll, validate, fetchProfile...) à la
-    // destruction. Le nettoyage implicite d'QObject ne supprimerait m_network
-    // qu'après que nos propres membres (m_login, m_accessToken...) aient déjà
-    // été détruits par le destructeur implicite ; si cette suppression
-    // déclenche le finished() du reply en cours de façon synchrone (connexion
-    // directe, même thread), le lambda connecté toucherait des membres déjà
-    // détruits -> "destructor may have already run". On le supprime donc en
-    // premier, tant que le reste de l'objet est encore valide.
+    // A request may be in flight (poll, validate, fetchProfile...) at
+    // destruction time. QObject's implicit cleanup would only delete
+    // m_network after our own members (m_login, m_accessToken...) have
+    // already been destroyed by the implicit destructor; if that deletion
+    // synchronously triggers the in-flight reply's finished() (direct
+    // connection, same thread), the connected lambda would touch already-
+    // destroyed members -> "destructor may have already run". So it's
+    // deleted first, while the rest of the object is still valid.
     delete m_network;
     m_network = nullptr;
 }
@@ -90,7 +90,7 @@ void TwitchAuth::requestDeviceCode()
 
         if (reply->error() != QNetworkReply::NoError) {
             emit authFailed(
-                QStringLiteral("Impossible de démarrer la connexion Twitch : %1").arg(reply->errorString()));
+                QStringLiteral("Could not start the Twitch login: %1").arg(reply->errorString()));
             return;
         }
 
@@ -101,7 +101,7 @@ void TwitchAuth::requestDeviceCode()
         const QString userCode = obj.value(QStringLiteral("user_code")).toString();
 
         if (m_deviceCode.isEmpty() || verificationUri.isEmpty()) {
-            emit authFailed(QStringLiteral("Réponse inattendue de Twitch lors de la demande de code"));
+            emit authFailed(QStringLiteral("Unexpected response from Twitch while requesting the code"));
             return;
         }
 
@@ -154,23 +154,24 @@ void TwitchAuth::handleTokenResponse(QNetworkReply *reply, bool isRefresh)
     }
 
     if (isRefresh) {
-        // Le refresh a échoué : la session est irrécupérable, il faudra se reconnecter.
+        // The refresh failed: the session is unrecoverable, a fresh login is needed.
         clearTokens();
-        emit authFailed(QStringLiteral("Session Twitch expirée, reconnexion nécessaire"));
+        emit authFailed(QStringLiteral("Twitch session expired, please log in again"));
         return;
     }
 
-    // Flux "device code" : tant que ce n'est pas encore autorisé côté navigateur,
-    // Twitch répond authorization_pending et il faut continuer de poller.
+    // "Device code" flow: as long as it hasn't been authorized in the
+    // browser yet, Twitch replies authorization_pending and polling must
+    // continue.
     const QString message = obj.value(QStringLiteral("message")).toString();
     if (message == QLatin1String("authorization_pending"))
-        return; // le timer relancera un poll au prochain tick
+        return; // the timer will trigger another poll on the next tick
 
     if (m_pollTimer)
         m_pollTimer->stop();
 
     const QString reason = message.isEmpty() ? reply->errorString() : message;
-    emit authFailed(QStringLiteral("Connexion Twitch refusée ou expirée : %1").arg(reason));
+    emit authFailed(QStringLiteral("Twitch login denied or expired: %1").arg(reason));
 }
 
 void TwitchAuth::validateToken()
@@ -195,10 +196,10 @@ void TwitchAuth::validateToken()
             }
         }
 
-        // Token invalide ou expiré : on tente un rafraîchissement avant d'abandonner.
+        // Invalid or expired token: try a refresh before giving up.
         if (m_refreshToken.isEmpty()) {
             clearTokens();
-            emit authFailed(QStringLiteral("Session Twitch invalide"));
+            emit authFailed(QStringLiteral("Invalid Twitch session"));
             return;
         }
 
@@ -218,8 +219,8 @@ void TwitchAuth::validateToken()
     });
 }
 
-// Récupère le nom d'affichage et l'avatar via l'API Helix (GET /users, sans
-// paramètre id/login -> renvoie l'utilisateur associé au token lui-même).
+// Fetches the display name and avatar via the Helix API (GET /users, with
+// no id/login parameter -> returns the user associated with the token itself).
 void TwitchAuth::fetchProfile()
 {
     QNetworkRequest request((QUrl(QStringLiteral("https://api.twitch.tv/helix/users"))));
@@ -242,9 +243,9 @@ void TwitchAuth::fetchProfile()
             }
         }
 
-        // Le profil (avatar/nom d'affichage) est un bonus cosmétique : même
-        // en cas d'échec de cet appel, l'authentification elle-même est
-        // acquise (login valide) et ne doit pas être bloquée pour autant.
+        // The profile (avatar/display name) is a cosmetic bonus: even if
+        // this call fails, authentication itself already succeeded (valid
+        // login) and shouldn't be blocked on it.
         emit authenticated(m_login, displayName, avatarUrl);
     });
 }
