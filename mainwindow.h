@@ -67,6 +67,7 @@ private slots:
     void onStreamTagInputReturnPressed();
     void onPresetSaveButtonClicked();
     void onAboutActionTriggered();
+    void onMutedUsersButtonClicked();
 
 private:
     void attachChat(Chat *chat);
@@ -84,6 +85,11 @@ private:
     void showPresetInfoDialog(const QString &name);
     int presetIndexByName(const QString &name) const;
     QString resolveCategoryId(const QString &categoryText) const;
+    void loadMutedUsers();
+    void saveMutedUsers();
+    void removeMutedUser(const QString &username);
+    bool isUserMuted(const QString &username) const;
+    void showMutedUsersDialog();
 
     Ui::MainWindow *ui;
     Chat *m_chat = nullptr;
@@ -103,5 +109,9 @@ private:
 
     static constexpr int kMaxPresets = 10;
     QList<StreamPreset> m_presets;
+
+    // Usernames (Twitch login, lowercase) whose messages are displayed but
+    // never sent to the TTS queue.
+    QStringList m_mutedUsers;
 };
 #endif // MAINWINDOW_H

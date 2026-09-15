@@ -267,6 +267,13 @@
          </layout>
         </item>
         <item>
+         <widget class="QPushButton" name="mutedUsersButton">
+          <property name="text">
+           <string>Muted users...</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <spacer name="connexionSpacer">
           <property name="orientation">
            <enum>Qt::Orientation::Vertical</enum>
@@ -582,6 +589,8 @@
     <addaction name="actionReading"/>
     <addaction name="actionSkip_messages"/>
     <addaction name="actionSaturation"/>
+    <addaction name="separator"/>
+    <addaction name="actionMutedUsers"/>
    </widget>
    <widget class="QMenu" name="menuStream">
     <property name="title">
@@ -654,6 +663,11 @@
    </property>
    <property name="text">
     <string>Load from Twitch</string>
+   </property>
+  </action>
+  <action name="actionMutedUsers">
+   <property name="text">
+    <string>Muted users...</string>
    </property>
   </action>
   <action name="actionAboutLutherTools">

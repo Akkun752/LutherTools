@@ -23,11 +23,14 @@
 #include <QNetworkReply>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSettings>
 #include <QStringListModel>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <functional>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -111,7 +114,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Twitch menu: both items drive the same toggle logic as the button
     // (log in if logged out, disconnect if logged in) - only one of the two
     // is ever visible at a time (see onTwitchAuthenticated/onTwitchLoggedOut).
-    // Reconnect (Chat) is left unconnected for now, no such feature exists yet.
+    // Reconnect (Chat) is wired further down, alongside chatReconnectButton.
     connect(ui->actionLog_in, &QAction::triggered, this, &MainWindow::onTwitchLoginButtonClicked);
     connect(ui->actionDisconnect, &QAction::triggered, this, &MainWindow::onTwitchLoginButtonClicked);
 
@@ -158,6 +161,12 @@ MainWindow::MainWindow(QWidget *parent)
     // above the chat panel or from the Twitch menu.
     connect(ui->chatReconnectButton, &QPushButton::clicked, this, &MainWindow::onChatReconnectButtonClicked);
     connect(ui->actionReconnect_Chat, &QAction::triggered, this, &MainWindow::onChatReconnectButtonClicked);
+
+    // Muted users: purely local (like presets), independent of Twitch -
+    // same dialog whether opened from the Settings panel or the TTS menu.
+    connect(ui->mutedUsersButton, &QPushButton::clicked, this, &MainWindow::onMutedUsersButtonClicked);
+    connect(ui->actionMutedUsers, &QAction::triggered, this, &MainWindow::onMutedUsersButtonClicked);
+    loadMutedUsers();
 
     m_twitchAuth->restoreSession();
 }
@@ -245,7 +254,9 @@ void MainWindow::onChatMessageReceived(const QString &username, const QString &m
     ui->chatDisplay->append(
         QStringLiteral("<b>%1</b> : %2").arg(username.toHtmlEscaped(), message.toHtmlEscaped()));
 
-    if (ui->ttsCheckBox->isChecked())
+    // Muted users still show up in the chat panel above - they're just
+    // never forwarded to the TTS queue.
+    if (ui->ttsCheckBox->isChecked() && !isUserMuted(username))
         m_tts->enqueue(message);
 }
 
@@ -882,8 +893,136 @@ void MainWindow::onAboutActionTriggered()
            "<p><b>Corentin BOUTIGNY</b><br>"
            "Twitch connection<br>"
            "TTS<br>"
-           "Presets</p>"
+           "Presets<br>"
+           "Moderation</p>"
            "<p><b>Benjamin DESCOURS--TERRIER</b><br>"
            "Linux port</p>")
             .arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)));
+}
+
+void MainWindow::onMutedUsersButtonClicked()
+{
+    showMutedUsersDialog();
+}
+
+void MainWindow::loadMutedUsers()
+{
+    const QSettings settings(appSettingsFilePath(), QSettings::IniFormat);
+    m_mutedUsers = settings.value(QStringLiteral("mutedUsers")).toStringList();
+}
+
+void MainWindow::saveMutedUsers()
+{
+    QSettings settings(appSettingsFilePath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("mutedUsers"), m_mutedUsers);
+}
+
+void MainWindow::removeMutedUser(const QString &username)
+{
+    m_mutedUsers.removeAll(username);
+    saveMutedUsers();
+}
+
+bool MainWindow::isUserMuted(const QString &username) const
+{
+    return m_mutedUsers.contains(username, Qt::CaseInsensitive);
+}
+
+void MainWindow::showMutedUsersDialog()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Muted users"));
+    dialog.resize(260, 340);
+
+    auto *layout = new QVBoxLayout(&dialog);
+
+    auto *description =
+        new QLabel(tr("Messages from these users are still shown in chat, but never read aloud by TTS."), &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    // Same scrollable list-of-rows pattern as the presets list.
+    auto *scrollArea = new QScrollArea(&dialog);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *scrollContents = new QWidget(scrollArea);
+    auto *listLayout = new QVBoxLayout(scrollContents);
+    listLayout->setSpacing(0);
+    listLayout->setContentsMargins(0, 0, 0, 0);
+    scrollArea->setWidget(scrollContents);
+    layout->addWidget(scrollArea, 1);
+
+    // std::function (rather than a plain lambda) so it can call itself -
+    // needed to redraw the list after every add/remove.
+    std::function<void()> rebuildList;
+    rebuildList = [this, listLayout, scrollContents, &rebuildList]() {
+        QLayoutItem *item;
+        while ((item = listLayout->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+
+        for (const QString &user : std::as_const(m_mutedUsers)) {
+            auto *row = new QWidget(scrollContents);
+            auto *rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(2, 1, 2, 1);
+            rowLayout->setSpacing(2);
+
+            auto *nameLabel = new QLabel(user, row);
+            rowLayout->addWidget(nameLabel, 1);
+
+            auto *removeButton = new QToolButton(row);
+            removeButton->setText(QStringLiteral("×"));
+            removeButton->setToolTip(tr("Unmute this user"));
+            removeButton->setCursor(Qt::PointingHandCursor);
+            removeButton->setStyleSheet(QStringLiteral(
+                "QToolButton { color: #333333; background: transparent; border: none; font-weight: bold; }"
+                "QToolButton:hover { color: black; background-color: #d0d0d0; }"));
+            connect(removeButton, &QToolButton::clicked, this, [this, user, &rebuildList]() {
+                removeMutedUser(user);
+                rebuildList();
+            });
+            rowLayout->addWidget(removeButton);
+
+            listLayout->addWidget(row);
+        }
+
+        listLayout->addStretch();
+    };
+    rebuildList();
+
+    auto *addLayout = new QHBoxLayout();
+    auto *addEdit = new QLineEdit(&dialog);
+    addEdit->setPlaceholderText(tr("Twitch username"));
+    addLayout->addWidget(addEdit);
+    auto *addButton = new QPushButton(tr("Add"), &dialog);
+    addLayout->addWidget(addButton);
+    layout->addLayout(addLayout);
+
+    // Stored/displayed lowercase: chat usernames are always lowercase IRC
+    // logins (e.g. "wizebot" for the channel bot shown as "WZBot"), so
+    // matching against them only works if entered the same way.
+    auto addUser = [this, addEdit, &rebuildList]() {
+        const QString name = addEdit->text().trimmed().toLower();
+        if (name.isEmpty())
+            return;
+        if (m_mutedUsers.contains(name, Qt::CaseInsensitive)) {
+            addEdit->clear();
+            return;
+        }
+
+        m_mutedUsers << name;
+        saveMutedUsers();
+        addEdit->clear();
+        rebuildList();
+    };
+    connect(addButton, &QPushButton::clicked, &dialog, addUser);
+    connect(addEdit, &QLineEdit::returnPressed, &dialog, addUser);
+
+    auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    buttonBox->button(QDialogButtonBox::Close)->setText(tr("Close"));
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttonBox);
+
+    dialog.exec();
 }
