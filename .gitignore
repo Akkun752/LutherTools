@@ -6,6 +6,7 @@ out/
 [Dd]ebug/
 [Rr]elease/
 cmake-build-*/
+.idea/
 
 # Artefacts CMake (au cas où un build serait lancé directement à la racine).
 CMakeFiles/

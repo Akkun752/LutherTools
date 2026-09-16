@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LutherTools VERSION 0.2.2.1 LANGUAGES CXX)
+project(LutherTools VERSION 0.2.2.2 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -51,6 +51,8 @@ set(PROJECT_SOURCES
         flowlayout.cpp
         third_party/dr_mp3.h
         third_party/dr_mp3_impl.cpp
+        third_party/logger.h
+        third_party/logger.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/version.h
         ${TS_FILES}
 )
@@ -92,6 +94,7 @@ target_link_libraries(LutherTools PRIVATE
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::WebSockets
     Qt${QT_VERSION_MAJOR}::Multimedia
+    Qt${QT_VERSION_MAJOR}::TextToSpeech
 )
 
 target_include_directories(LutherTools PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})

@@ -6,13 +6,19 @@
 #include <QString>
 #include <QMutex>
 #include <QWaitCondition>
+#include <QLocale>
+#include <QVoice>
 #include <vector>
 
-// Une voix Windows (SAPI) installée sur la machine.
+class QTextToSpeech;
+
+// Une voix locale installée sur la machine, exposée par le backend Qt
+// TextToSpeech (SAPI/OneCore sous Windows, speech-dispatcher/flite sous
+// Linux, AVSpeechSynthesizer sous macOS...).
 struct SapiVoice
 {
-    QString id;   // identifiant du token COM (chemin registre), utilisé pour re-sélectionner la voix
-    QString name; // nom lisible, ex: "Microsoft Hortense Desktop - French"
+    QVoice voice;  // objet QVoice complet, nécessaire pour re-sélectionner la voix
+    QString name;  // nom lisible, ex: "Microsoft Hortense Desktop - French" ou "french-mbrola-1"
 };
 
 // Moteur TTS : empile les messages à lire et les synthétise un par un, dans un
@@ -27,7 +33,8 @@ struct SapiVoice
 // La synthèse essaie d'abord le service cloud edge-tts (mêmes voix que
 // read.py : Denise, Eloise, Henri...) et, si indisponible (pas de réseau,
 // protocole cassé côté Microsoft, timeout...), bascule automatiquement sur
-// une voix Windows locale (SAPI/OneCore) pour ne jamais rester muet.
+// une voix locale via QTextToSpeech (module Qt Speech, portable Windows/Linux/
+// macOS) pour ne jamais rester muet.
 //
 // Deux filtres optionnels, réglables en direct :
 //  - "lire 1 message sur N" : n'envoie qu'un message reçu sur N à la synthèse.
@@ -47,11 +54,12 @@ public:
     // message sur N") et démarre le thread si besoin.
     void enqueue(const QString &message);
 
-    // Voix Windows locales détectées au démarrage (utilisées en repli).
+    // Voix locales détectées au démarrage (utilisées en repli).
     const std::vector<SapiVoice> &availableVoices() const { return m_voices; }
 
-    // Volume de base de la voix Windows de repli, 0-100 (SAPI ne permet pas
-    // de sur-amplifier au-delà de 100%, contrairement au flux edge-tts).
+    // Volume de base de la voix locale de repli, 0-100 (QTextToSpeech ne
+    // permet pas de sur-amplifier au-delà de 100%, contrairement au flux
+    // edge-tts).
     void setVolume(int percent);
 
     // Filtre "Lire 1 message sur N".
@@ -78,8 +86,7 @@ protected:
 
 private:
     void loadVoices();
-    bool loadVoicesFromCategory(const wchar_t *categoryId);
-    float nextVolumeMultiplier(int &sapiVolumePercent);
+    float nextVolumeMultiplier(int &localVolumePercent);
     bool speakOne(const QString &message);
     bool speakOneEdge(const QString &message, float volumeMultiplier);
     bool speakOneLocal(const QString &message, int volumePercent);
