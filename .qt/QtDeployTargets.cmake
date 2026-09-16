@@ -1,2 +1,0 @@
-set(__QT_DEPLOY_TARGET_LutherTools_FILE /home/benjamin/LutherTools/LutherTools)
-set(__QT_DEPLOY_TARGET_LutherTools_TYPE EXECUTABLE)
