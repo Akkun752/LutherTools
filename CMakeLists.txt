@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LutherTools VERSION 0.3.1 LANGUAGES CXX)
+project(LutherTools VERSION 0.3.2 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
