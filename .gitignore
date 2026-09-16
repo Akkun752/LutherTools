@@ -7,7 +7,7 @@ out/
 [Rr]elease/
 cmake-build-*/
 .idea/
-
+.qt/
 # Artefacts CMake (au cas où un build serait lancé directement à la racine).
 CMakeFiles/
 CMakeCache.txt
