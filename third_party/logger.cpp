@@ -51,7 +51,7 @@ std::string Logger::currentTimestamp() {
 
 void Logger::log(LogLevel level, const std::string &message) {
     std::string logLine = "[" + currentTimestamp() + "] [" + levelToString(level) + "] " + message;
-
+    std::cout<< logLine << '\n';
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFile.is_open()) {
         logFile << logLine << '\n';
