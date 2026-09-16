@@ -52,3 +52,5 @@ desktop.ini
 .DS_Store
 *.bak
 *.orig
+
+log/
