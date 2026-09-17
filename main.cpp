@@ -9,6 +9,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
+    logger.info("Application start");
     // Identifies the app for QSettings/QStandardPaths (preferences file in
     // %APPDATA%/FlitStudio/LutherTools.ini, see appSettingsFilePath()).
     QCoreApplication::setOrganizationName(QStringLiteral("FlitStudio"));

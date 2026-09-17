@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LutherTools VERSION 0.3.2 LANGUAGES CXX)
+project(LutherTools VERSION 0.4.1 LANGUAGES CXX)
 
 if(WIN32)
     enable_language(RC)
@@ -10,13 +10,13 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-# version.h (C++ macros, e.g. window title) and version.rc (Windows exe
-# properties + icon embedded in the executable) are generated from the
-# VERSION above: change the version number only here.
+# version.h (macros C++, ex: fenêtre) et version.rc (propriétés Windows de
+# l'exe + icône embarquée dans l'exécutable) sont générés à partir de la
+# VERSION ci-dessus : changer le numéro de version se fait uniquement ici.
 configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h @ONLY)
 if(WIN32)
-    # Absolute path: version.rc is generated in the build directory, while
-    # the icon stays in the source directory.
+    # Chemin absolu : version.rc est généré dans le dossier de build, tandis
+    # que l'icône reste dans le dossier source.
     set(LUTHERTOOLS_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/res/LutherTools.ico")
     configure_file(version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
 endif()
@@ -51,6 +51,8 @@ set(PROJECT_SOURCES
         flowlayout.cpp
         third_party/dr_mp3.h
         third_party/dr_mp3_impl.cpp
+        third_party/logger.h
+        third_party/logger.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/version.h
         ${TS_FILES}
 )
@@ -92,12 +94,13 @@ target_link_libraries(LutherTools PRIVATE
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::WebSockets
     Qt${QT_VERSION_MAJOR}::Multimedia
+    Qt${QT_VERSION_MAJOR}::TextToSpeech
 )
 
 target_include_directories(LutherTools PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
 if(WIN32)
-    # TTS: SAPI (Windows voices) + COM.
+    # TTS : SAPI (voix Windows) + COM.
     target_link_libraries(LutherTools PRIVATE sapi ole32 oleaut32)
 endif()
 

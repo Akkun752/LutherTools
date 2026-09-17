@@ -8,21 +8,16 @@
 #include <QMediaDevices>
 #include <QMutexLocker>
 #include <QRandomGenerator>
-
-#include <windows.h>
-#include <sapi.h>
-#include <wrl/client.h>
+#include <QTextToSpeech>
 
 #include "third_party/dr_mp3.h"
 
-using Microsoft::WRL::ComPtr;
-
 namespace {
 
-// edge-tts cloud voices:
-// this is the service Microsoft Edge uses for "Read aloud", not the local Windows
-// voices. Tried first, with automatic fallback to Windows voices if the
-// service is unreachable.
+// Voix cloud edge-tts (mêmes que VOIX_DISPONIBLES dans read.py) : c'est le
+// service que Microsoft Edge utilise pour "Lire à voix haute", pas des voix
+// locales. Essayé en priorité, avec repli automatique sur QTextToSpeech si
+// le service est inaccessible.
 const QVector<QString> &edgeVoices()
 {
     static const QVector<QString> voices = {
@@ -43,38 +38,12 @@ const QVector<QString> &edgeVoices()
 
 } // namespace
 
-namespace {
-
-// Initializes COM on the current thread. hr receives the raw result; the
-// function returns true if the COM apartment is usable (initialized here,
-// or already initialized earlier on this thread with a different model -
-// RPC_E_CHANGED_MODE -, e.g. by Qt).
-bool comInit(HRESULT &hr)
-{
-    hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    return SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE;
-}
-
-// Whether the matching comInit() call needs to be balanced by a
-// CoUninitialize() (only if it actually (re)counted an initialization).
-bool comNeedsUninit(HRESULT hr)
-{
-    return hr == S_OK || hr == S_FALSE;
-}
-
-} // namespace
-
 TTS::TTS(QObject *parent)
     : QThread(parent)
 {
-    // Voice enumeration happens right away so they can be exposed via
-    // availableVoices() before the very first enqueue()/start().
-    HRESULT hr;
-    const bool comOk = comInit(hr);
-    if (comOk)
-        loadVoices();
-    if (comNeedsUninit(hr))
-        CoUninitialize();
+    // L'énumération des voix a lieu tout de suite pour pouvoir les exposer
+    // via availableVoices() avant même le premier enqueue()/start().
+    loadVoices();
 }
 
 TTS::~TTS()
@@ -87,55 +56,36 @@ void TTS::loadVoices()
 {
     m_voices.clear();
 
-    // "OneCore" voices (Windows 10/11, Speech_OneCore category) are the ones
-    // downloaded from Settings > Time & Language > Speech: far more numerous
-    // and better quality than the 2 legacy "Desktop" SAPI voices
-    // (Zira/Hortense) registered under the classic SAPI category
-    // SPCAT_VOICES. So they're used first, falling back to SPCAT_VOICES if
-    // no OneCore voice is installed at all.
-    static const wchar_t *kOneCoreVoicesCategory =
-        L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices";
+    // QTextToSpeech utilise le moteur par défaut de la plateforme :
+    // SAPI/OneCore sous Windows, speech-dispatcher (ou flite/espeak selon
+    // l'installation) sous Linux, AVSpeechSynthesizer sous macOS. Un seul
+    // code, portable, sans dépendance système écrite à la main.
+    QTextToSpeech engine;
+    engine.setLocale(QLocale(QLocale::French));
 
-    if (!loadVoicesFromCategory(kOneCoreVoicesCategory))
-        loadVoicesFromCategory(SPCAT_VOICES);
-}
-
-bool TTS::loadVoicesFromCategory(const wchar_t *categoryId)
-{
-    ComPtr<ISpObjectTokenCategory> category;
-    HRESULT hr = CoCreateInstance(CLSID_SpObjectTokenCategory, nullptr, CLSCTX_ALL,
-                                   IID_PPV_ARGS(&category));
-    if (FAILED(hr))
-        return false;
-
-    if (FAILED(category->SetId(categoryId, FALSE)))
-        return false;
-
-    ComPtr<IEnumSpObjectTokens> enumTokens;
-    if (FAILED(category->EnumTokens(nullptr, nullptr, &enumTokens)))
-        return false;
-
-    ComPtr<ISpObjectToken> token;
-    while (enumTokens->Next(1, &token, nullptr) == S_OK) {
-        LPWSTR id = nullptr;
-        if (SUCCEEDED(token->GetId(&id))) {
-            SapiVoice voice;
-            voice.id = QString::fromWCharArray(id);
-            CoTaskMemFree(id);
-
-            LPWSTR description = nullptr;
-            if (SUCCEEDED(token->GetStringValue(nullptr, &description))) {
-                voice.name = QString::fromWCharArray(description);
-                CoTaskMemFree(description);
-            } else {
-                voice.name = voice.id;
-            }
-
-            m_voices.push_back(voice);
-        }
+    const QVector<QVoice> voices = engine.availableVoices();
+    m_voices.reserve(voices.size());
+    for (const QVoice &voice : voices) {
+        SapiVoice entry;
+        entry.voice = voice;
+        entry.name = voice.name();
+        m_voices.push_back(entry);
     }
 
-    return !m_voices.empty();
+    // Si aucune voix française n'est disponible (moteur système sans données
+    // fr installées), on retente sans filtre de langue plutôt que de rester
+    // sans repli local du tout.
+    if (m_voices.empty()) {
+        engine.setLocale(QLocale());
+        const QVector<QVoice> fallbackVoices = engine.availableVoices();
+        m_voices.reserve(fallbackVoices.size());
+        for (const QVoice &voice : fallbackVoices) {
+            SapiVoice entry;
+            entry.voice = voice;
+            entry.name = voice.name();
+            m_voices.push_back(entry);
+        }
+    }
 }
 
 void TTS::enqueue(const QString &message)
@@ -144,7 +94,7 @@ void TTS::enqueue(const QString &message)
         QMutexLocker locker(&m_mutex);
 
         ++m_receivedCount;
-        // "Read 1 message out of N" filter: only the Nth received message goes through.
+        // Filtre "Lire 1 message sur N" : seul le N-ième message reçu passe.
         if (m_readEveryNEnabled && (m_receivedCount % qMax(1, m_readEveryN)) != 0)
             return;
 
@@ -202,14 +152,6 @@ void TTS::stop()
 
 void TTS::run()
 {
-    // Every thread that calls SAPI must initialize COM itself.
-    HRESULT hr;
-    if (!comInit(hr)) {
-        emit errorOccurred(QStringLiteral("Could not initialize COM for TTS"));
-        return;
-    }
-    const bool needsUninit = comNeedsUninit(hr);
-
     while (true) {
         QString message;
         {
@@ -225,19 +167,16 @@ void TTS::run()
 
         speakOne(message);
     }
-
-    if (needsUninit)
-        CoUninitialize();
 }
 
-// Determines this message's volume: normally the base volume (x1.0 on the
-// edge-tts side, m_volume% on the SAPI side), unless "random saturation" is
-// enabled and the random roll falls within m_saturationChancePercent%, in
-// which case it's played at m_saturationFactor times the base volume (e.g.
-// 20 = twenty times louder). sapiVolumePercent receives the equivalent for
-// the SAPI fallback: since that can never exceed 100%, any factor ≥ 1
-// simply comes back as the maximum volume there.
-float TTS::nextVolumeMultiplier(int &sapiVolumePercent)
+// Détermine le volume de ce message : normalement le volume de base (x1.0
+// côté edge-tts, m_volume% côté repli local), sauf si la "saturation
+// aléatoire" est active et que le tirage aléatoire tombe dans
+// m_saturationChancePercent%, auquel cas il est joué à m_saturationFactor
+// fois le volume de base (ex: 20 = vingt fois plus fort). localVolumePercent
+// reçoit l'équivalent pour le repli local : celui-ci ne pouvant jamais
+// dépasser 100%, tout facteur ≥ 1 y revient simplement au volume maximum.
+float TTS::nextVolumeMultiplier(int &localVolumePercent)
 {
     QMutexLocker locker(&m_mutex);
 
@@ -245,27 +184,28 @@ float TTS::nextVolumeMultiplier(int &sapiVolumePercent)
         m_saturationEnabled && QRandomGenerator::global()->bounded(100) < m_saturationChancePercent;
 
     if (saturate) {
-        sapiVolumePercent = 100;
+        localVolumePercent = 100;
         return static_cast<float>(m_saturationFactor);
     }
 
-    sapiVolumePercent = m_volume;
+    localVolumePercent = m_volume;
     return 1.0f;
 }
 
 bool TTS::speakOne(const QString &message)
 {
-    int sapiVolumePercent = m_volume;
-    const float volumeMultiplier = nextVolumeMultiplier(sapiVolumePercent);
+    int localVolumePercent = m_volume;
+    const float volumeMultiplier = nextVolumeMultiplier(localVolumePercent);
 
-    // edge-tts (cloud, same voices as read.py) first; falls back to local
-    // Windows voices if the service is unreachable for any reason (no
-    // network, protocol broken on Microsoft's end, timeout...).
+    // edge-tts (cloud, mêmes voix que read.py) en priorité ; repli sur une
+    // voix locale (QTextToSpeech) si le service est inaccessible pour une
+    // raison quelconque (pas de réseau, protocole cassé côté Microsoft,
+    // timeout...).
     if (speakOneEdge(message, volumeMultiplier))
         return true;
 
-    emit errorOccurred(QStringLiteral("edge-tts unavailable: falling back to a local Windows voice"));
-    return speakOneLocal(message, sapiVolumePercent);
+    emit errorOccurred(QStringLiteral("edge-tts indisponible : bascule sur une voix locale"));
+    return speakOneLocal(message, localVolumePercent);
 }
 
 bool TTS::speakOneEdge(const QString &message, float volumeMultiplier)
@@ -284,7 +224,7 @@ bool TTS::speakOneEdge(const QString &message, float volumeMultiplier)
         loop.quit();
     });
     connect(&client, &EdgeTtsClient::failed, &loop, [&](const QString &reason) {
-        emit errorOccurred(QStringLiteral("edge-tts: %1").arg(reason));
+        emit errorOccurred(QStringLiteral("edge-tts : %1").arg(reason));
         loop.quit();
     });
 
@@ -300,15 +240,15 @@ bool TTS::speakOneEdge(const QString &message, float volumeMultiplier)
     return played;
 }
 
-// Decodes the MP3 returned by edge-tts (dr_mp3), applies the volume
-// multiplier on the raw PCM with clipping at ±1.0 (equivalent of read.py's
-// np.clip(audio_data * VOLUME_MULTIPLIER, -1.0, 1.0)), then plays the
-// result on the default audio output.
+// Décode le MP3 renvoyé par edge-tts (dr_mp3), applique le multiplicateur de
+// volume sur le PCM brut avec écrêtage à ±1.0 (équivalent du
+// np.clip(audio_data * VOLUME_MULTIPLIER, -1.0, 1.0) de read.py), puis joue
+// le résultat sur la sortie audio par défaut.
 bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
 {
     drmp3 mp3;
     if (!drmp3_init_memory(&mp3, mp3Data.constData(), static_cast<size_t>(mp3Data.size()), nullptr)) {
-        emit errorOccurred(QStringLiteral("Could not decode edge-tts audio"));
+        emit errorOccurred(QStringLiteral("Impossible de décoder l'audio edge-tts"));
         return false;
     }
 
@@ -321,7 +261,7 @@ bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
     drmp3_uninit(&mp3);
 
     if (framesRead == 0) {
-        emit errorOccurred(QStringLiteral("Empty edge-tts audio"));
+        emit errorOccurred(QStringLiteral("Audio edge-tts vide"));
         return false;
     }
     samples.resize(static_cast<size_t>(framesRead) * static_cast<size_t>(channels));
@@ -336,12 +276,12 @@ bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
 
     const QAudioDevice device = QMediaDevices::defaultAudioOutput();
     if (device.isNull() || !device.isFormatSupported(format)) {
-        emit errorOccurred(QStringLiteral("edge-tts audio format not supported by the default output"));
+        emit errorOccurred(QStringLiteral("Format audio edge-tts non supporté par la sortie par défaut"));
         return false;
     }
 
     QByteArray pcmBytes(reinterpret_cast<const char *>(samples.data()),
-                         static_cast<int>(samples.size() * sizeof(float)));
+                        static_cast<int>(samples.size() * sizeof(float)));
     QBuffer buffer(&pcmBytes);
     buffer.open(QIODevice::ReadOnly);
 
@@ -359,46 +299,47 @@ bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
     return true;
 }
 
+// Repli local, portable, via QTextToSpeech (module Qt Speech). Un moteur est
+// recréé ici (plutôt que réutilisé depuis loadVoices()) car il doit vivre
+// sur le thread qui l'utilise ; celui-ci est le thread TTS (QThread::run()),
+// différent du thread qui a construit TTS.
 bool TTS::speakOneLocal(const QString &message, int volumePercent)
 {
     if (m_voices.empty()) {
-        emit errorOccurred(QStringLiteral("No installed Windows voice found"));
+        emit errorOccurred(QStringLiteral("Aucune voix locale installée trouvée"));
         return false;
     }
 
-    // Random voice among all installed Windows voices, like
-    // random.choice(VOIX_DISPONIBLES) in read.py.
+    // Voix aléatoire parmi toutes les voix locales disponibles, comme
+    // random.choice(VOIX_DISPONIBLES) dans read.py.
     const int index = int(QRandomGenerator::global()->bounded(int(m_voices.size())));
     const SapiVoice &voice = m_voices[index];
 
-    // The token enumerated in the constructor can't be reused here (a
-    // different COM thread): it's recreated from its identifier instead.
-    ComPtr<ISpObjectToken> token;
-    HRESULT hr = CoCreateInstance(CLSID_SpObjectToken, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&token));
-    if (SUCCEEDED(hr))
-        hr = token->SetId(nullptr, reinterpret_cast<LPCWSTR>(voice.id.utf16()), FALSE);
-    if (FAILED(hr)) {
-        emit errorOccurred(QStringLiteral("Voice not found: %1").arg(voice.name));
-        return false;
-    }
+    QTextToSpeech engine;
+    engine.setVoice(voice.voice);
+    // QTextToSpeech attend le volume en [-1.0, 1.0] (0.0 = volume "normal"
+    // du système), pas en pourcentage absolu comme SAPI ; on le mappe donc
+    // sur [-1.0, 0.0] pour rester un simple atténuateur, jamais un
+    // amplificateur (comme l'ancien SetVolume(0-100)).
+    engine.setVolume((qBound(0, volumePercent, 100) - 100) / 100.0);
 
-    ComPtr<ISpVoice> spVoice;
-    hr = CoCreateInstance(CLSID_SpVoice, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&spVoice));
-    if (FAILED(hr)) {
-        emit errorOccurred(QStringLiteral("Could not create the SAPI engine"));
-        return false;
-    }
-
-    spVoice->SetVoice(token.Get());
-    spVoice->SetVolume(static_cast<USHORT>(qBound(0, volumePercent, 100)));
-
+    // say() est asynchrone : on n'attend donc pas un retour direct, mais le
+    // prochain changement d'état signalant la fin (Ready = terminé
+    // normalement, Error = échec). stateChanged() ne se déclenche que sur un
+    // changement réel, jamais pour l'état initial : pas de risque de sortir
+    // de la boucle avant même que say() n'ait commencé à parler.
+    bool ok = true;
+    QEventLoop loop;
+    connect(&engine, &QTextToSpeech::stateChanged, &loop, [&](QTextToSpeech::State state) {
+        if (state == QTextToSpeech::Error)
+            ok = false;
+        if (state == QTextToSpeech::Ready || state == QTextToSpeech::Error)
+            loop.quit();
+    });
     emit speechStarted(message, voice.name);
-
-    // Appel bloquant (pas de SPF_ASYNC) : équivalent du sd.wait() de read.py,
-    // le message suivant de la file n'est traité qu'une fois celui-ci terminé.
-    hr = spVoice->Speak(reinterpret_cast<LPCWSTR>(message.utf16()), SPF_DEFAULT, nullptr);
+    engine.say(message);
+    loop.exec();
 
     emit speechFinished(message);
-
-    return SUCCEEDED(hr);
+    return ok;
 }
