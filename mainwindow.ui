@@ -173,6 +173,13 @@
          </layout>
         </item>
         <item>
+         <widget class="QCheckBox" name="emojiFilterCheckBox">
+          <property name="text">
+           <string>Emoji filter</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="saturationCheckBox">
           <property name="text">
            <string>Random saturation</string>
@@ -270,6 +277,13 @@
          <widget class="QPushButton" name="mutedUsersButton">
           <property name="text">
            <string>Muted users...</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="bannedWordsButton">
+          <property name="text">
+           <string>Banned words...</string>
           </property>
          </widget>
         </item>
@@ -591,6 +605,7 @@
     <addaction name="actionSaturation"/>
     <addaction name="separator"/>
     <addaction name="actionMutedUsers"/>
+    <addaction name="actionBannedWords"/>
    </widget>
    <widget class="QMenu" name="menuStream">
     <property name="title">
@@ -668,6 +683,11 @@
   <action name="actionMutedUsers">
    <property name="text">
     <string>Muted users...</string>
+   </property>
+  </action>
+  <action name="actionBannedWords">
+   <property name="text">
+    <string>Banned words...</string>
    </property>
   </action>
   <action name="actionAboutLutherTools">

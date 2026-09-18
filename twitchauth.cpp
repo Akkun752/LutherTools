@@ -1,5 +1,6 @@
 #include "twitchauth.h"
 #include "appsettings.h"
+#include "third_party/logger.h"
 #include "twitchconstants.h"
 
 #include <QDesktopServices>
@@ -21,7 +22,9 @@ namespace {
 // chat:read / chat:edit: authenticated IRC connection (instead of
 // anonymous), needed to be able to send messages in chat as the connected
 // channel.
-constexpr auto kScopes = "channel:manage:broadcast chat:read chat:edit";
+// moderator:manage:chat_messages: deleting a chat message via the Helix API
+// (used by the banned-words auto-deletion feature).
+constexpr auto kScopes = "channel:manage:broadcast chat:read chat:edit moderator:manage:chat_messages";
 
 } // namespace
 
@@ -67,6 +70,8 @@ void TwitchAuth::startLogin()
 
 void TwitchAuth::logout()
 {
+    logger.info("Twitch OAuth logged out: login=" + m_login.toStdString());
+
     clearTokens();
     m_login.clear();
     m_userId.clear();
@@ -190,6 +195,7 @@ void TwitchAuth::validateToken()
             m_scopes.clear();
             for (const QJsonValue &scope : obj.value(QStringLiteral("scopes")).toArray())
                 m_scopes << scope.toString();
+            logger.info("Twitch OAuth scopes granted: " + m_scopes.join(QStringLiteral(", ")).toStdString());
             if (!m_login.isEmpty()) {
                 fetchProfile();
                 return;
@@ -246,6 +252,7 @@ void TwitchAuth::fetchProfile()
         // The profile (avatar/display name) is a cosmetic bonus: even if
         // this call fails, authentication itself already succeeded (valid
         // login) and shouldn't be blocked on it.
+        logger.info("Twitch OAuth authenticated: login=" + m_login.toStdString());
         emit authenticated(m_login, displayName, avatarUrl);
     });
 }

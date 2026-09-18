@@ -33,7 +33,11 @@ public:
 
 signals:
     // Emitted for every chat message received (equivalent of read.py's print + tts_queue.put).
-    void messageReceived(const QString &username, const QString &message);
+    // isModerator reflects the sender's badges (moderator or broadcaster);
+    // messageId is Twitch's own id for the message (empty if unavailable),
+    // needed to delete it via the Helix API.
+    void messageReceived(const QString &username, const QString &message, bool isModerator,
+                          const QString &messageId);
 
     // Status messages (connecting, disconnecting, errors) - equivalent of read.py's print(...).
     void statusChanged(const QString &status);

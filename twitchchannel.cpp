@@ -155,3 +155,38 @@ void TwitchChannel::searchCategories(const QString &query)
         emit categoriesFound(results);
     });
 }
+
+void TwitchChannel::deleteMessage(const QString &messageId)
+{
+    if (m_auth->accessToken().isEmpty() || m_auth->userId().isEmpty()) {
+        emit messageDeleteFailed(QStringLiteral("Not connected to Twitch"));
+        return;
+    }
+
+    QUrl url(QStringLiteral("https://api.twitch.tv/helix/moderation/chat"));
+    QUrlQuery query;
+    // The connected account is always both broadcaster and moderator of its
+    // own channel.
+    query.addQueryItem(QStringLiteral("broadcaster_id"), m_auth->userId());
+    query.addQueryItem(QStringLiteral("moderator_id"), m_auth->userId());
+    query.addQueryItem(QStringLiteral("message_id"), messageId);
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Authorization", "Bearer " + m_auth->accessToken().toUtf8());
+    request.setRawHeader("Client-Id", kTwitchClientId);
+
+    QNetworkReply *reply = m_network->deleteResource(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, messageId]() {
+        reply->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            const QJsonObject errorObj = QJsonDocument::fromJson(reply->readAll()).object();
+            const QString message = errorObj.value(QStringLiteral("message")).toString();
+            emit messageDeleteFailed(message.isEmpty() ? reply->errorString() : message);
+            return;
+        }
+
+        emit messageDeleted(messageId);
+    });
+}

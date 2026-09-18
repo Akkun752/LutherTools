@@ -47,7 +47,8 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
-    void onChatMessageReceived(const QString &username, const QString &message);
+    void onChatMessageReceived(const QString &username, const QString &message, bool isModerator,
+                                const QString &messageId);
     void onChatStatusChanged(const QString &status);
     void onChatSendButtonClicked();
     void onChatReconnectButtonClicked();
@@ -68,6 +69,7 @@ private slots:
     void onPresetSaveButtonClicked();
     void onAboutActionTriggered();
     void onMutedUsersButtonClicked();
+    void onBannedWordsButtonClicked();
 
 private:
     void attachChat(Chat *chat);
@@ -90,6 +92,13 @@ private:
     void removeMutedUser(const QString &username);
     bool isUserMuted(const QString &username) const;
     void showMutedUsersDialog();
+    void loadBannedWords();
+    void saveBannedWords();
+    void removeBannedWord(const QString &word);
+    void showBannedWordsDialog();
+    // Returns the first banned word found in message (case-insensitive
+    // substring match), or an empty string if none match.
+    QString firstBannedWord(const QString &message) const;
 
     Ui::MainWindow *ui;
     Chat *m_chat = nullptr;
@@ -113,5 +122,9 @@ private:
     // Usernames (Twitch login, lowercase) whose messages are displayed but
     // never sent to the TTS queue.
     QStringList m_mutedUsers;
+
+    // Words (lowercase): a non-moderator's message containing one is
+    // auto-deleted (see onChatMessageReceived / firstBannedWord).
+    QStringList m_bannedWords;
 };
 #endif // MAINWINDOW_H

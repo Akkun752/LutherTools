@@ -3,6 +3,7 @@
 #include "appsettings.h"
 #include "chat.h"
 #include "flowlayout.h"
+#include "third_party/logger.h"
 #include "tts.h"
 #include "twitchauth.h"
 #include "twitchchannel.h"
@@ -129,6 +130,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_twitchChannel, &TwitchChannel::updateSucceeded, this, &MainWindow::onStreamUpdateSucceeded);
     connect(m_twitchChannel, &TwitchChannel::updateFailed, this, &MainWindow::onStreamUpdateFailed);
     connect(m_twitchChannel, &TwitchChannel::categoriesFound, this, &MainWindow::onCategoriesFound);
+    connect(m_twitchChannel, &TwitchChannel::messageDeleted, this, [](const QString &messageId) {
+        logger.info("Twitch message deletion confirmed: id=" + messageId.toStdString());
+    });
+    connect(m_twitchChannel, &TwitchChannel::messageDeleteFailed, this, [](const QString &reason) {
+        logger.warning("Twitch message deletion failed: " + reason.toStdString());
+    });
 
     connect(ui->streamFetchButton, &QPushButton::clicked, this, &MainWindow::onStreamFetchButtonClicked);
     // Stream menu: same action as the "Load from Twitch" button.
@@ -167,6 +174,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->mutedUsersButton, &QPushButton::clicked, this, &MainWindow::onMutedUsersButtonClicked);
     connect(ui->actionMutedUsers, &QAction::triggered, this, &MainWindow::onMutedUsersButtonClicked);
     loadMutedUsers();
+
+    // Banned words: same pattern as muted users - just the save/edit system
+    // for now, not yet applied to incoming messages.
+    connect(ui->bannedWordsButton, &QPushButton::clicked, this, &MainWindow::onBannedWordsButtonClicked);
+    connect(ui->actionBannedWords, &QAction::triggered, this, &MainWindow::onBannedWordsButtonClicked);
+    loadBannedWords();
 
     m_twitchAuth->restoreSession();
 }
@@ -249,15 +262,40 @@ void MainWindow::attachChat(Chat *chat)
     connect(m_chat, &Chat::statusChanged, this, &MainWindow::onChatStatusChanged);
 }
 
-void MainWindow::onChatMessageReceived(const QString &username, const QString &message)
+void MainWindow::onChatMessageReceived(const QString &username, const QString &message, bool isModerator,
+                                        const QString &messageId)
 {
+    // Banned words: a non-moderator's message (isModerator is also true for
+    // our own messages, see onChatSendButtonClicked) containing one is
+    // auto-deleted on Twitch and never read - but it still shows up in the
+    // software's own chat panel, just marked as deleted, so there's a trace
+    // of what happened.
+    const QString bannedWord = isModerator ? QString() : firstBannedWord(message);
+    if (!bannedWord.isEmpty()) {
+        logger.warning("Auto-deleted message from " + username.toStdString() + " (banned word \""
+                        + bannedWord.toStdString() + "\"): " + message.toStdString());
+
+        if (m_twitchChannel && !messageId.isEmpty()) {
+            m_twitchChannel->deleteMessage(messageId);
+        } else {
+            logger.warning("Cannot delete message on Twitch: no message id available "
+                            "(IRCv3 tags not received for this line?)");
+        }
+
+        ui->chatDisplay->append(QStringLiteral("<b>(deleted) %1</b> : %2")
+                                     .arg(username.toHtmlEscaped(), message.toHtmlEscaped()));
+        return;
+    }
+
     ui->chatDisplay->append(
         QStringLiteral("<b>%1</b> : %2").arg(username.toHtmlEscaped(), message.toHtmlEscaped()));
 
     // Muted users still show up in the chat panel above - they're just
     // never forwarded to the TTS queue.
-    if (ui->ttsCheckBox->isChecked() && !isUserMuted(username))
+    if (ui->ttsCheckBox->isChecked() && !isUserMuted(username)) {
+        logger.info("Reading message from " + username.toStdString() + ": " + message.toStdString());
         m_tts->enqueue(message);
+    }
 }
 
 void MainWindow::onChatStatusChanged(const QString &status)
@@ -279,8 +317,10 @@ void MainWindow::onChatSendButtonClicked()
     // Twitch's IRC server doesn't echo our own messages back: their receipt
     // is simulated via the same path as any other message (display + TTS
     // reading if enabled), for behavior identical to a message sent from
-    // Twitch directly.
-    onChatMessageReceived(m_twitchAuth->login(), message);
+    // Twitch directly. isModerator=true: it's our own message, always exempt
+    // from the banned-words filter; no messageId, so it could never trigger
+    // a deletion anyway.
+    onChatMessageReceived(m_twitchAuth->login(), message, true, QString());
 
     ui->chatSendEdit->clear();
 }
@@ -896,7 +936,8 @@ void MainWindow::onAboutActionTriggered()
            "Presets<br>"
            "Moderation</p>"
            "<p><b>Benjamin DESCOURS--TERRIER</b><br>"
-           "Linux port</p>")
+           "Linux port<br>"
+           "Logger</p>")
             .arg(QStringLiteral(LUTHERTOOLS_VERSION_STRING)));
 }
 
@@ -919,6 +960,7 @@ void MainWindow::saveMutedUsers()
 
 void MainWindow::removeMutedUser(const QString &username)
 {
+    logger.info("Muted user removed: " + username.toStdString());
     m_mutedUsers.removeAll(username);
     saveMutedUsers();
 }
@@ -1011,6 +1053,7 @@ void MainWindow::showMutedUsersDialog()
             return;
         }
 
+        logger.info("Muted user added: " + name.toStdString());
         m_mutedUsers << name;
         saveMutedUsers();
         addEdit->clear();
@@ -1023,6 +1066,139 @@ void MainWindow::showMutedUsersDialog()
     buttonBox->button(QDialogButtonBox::Close)->setText(tr("Close"));
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttonBox);
+
+    dialog.exec();
+}
+
+void MainWindow::onBannedWordsButtonClicked()
+{
+    showBannedWordsDialog();
+}
+
+void MainWindow::loadBannedWords()
+{
+    const QSettings settings(appSettingsFilePath(), QSettings::IniFormat);
+    m_bannedWords = settings.value(QStringLiteral("bannedWords")).toStringList();
+}
+
+void MainWindow::saveBannedWords()
+{
+    QSettings settings(appSettingsFilePath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("bannedWords"), m_bannedWords);
+}
+
+void MainWindow::removeBannedWord(const QString &word)
+{
+    logger.info("Banned word removed: " + word.toStdString());
+    m_bannedWords.removeAll(word);
+    saveBannedWords();
+}
+
+QString MainWindow::firstBannedWord(const QString &message) const
+{
+    const QString lowerMessage = message.toLower();
+    for (const QString &word : m_bannedWords) {
+        if (lowerMessage.contains(word))
+            return word;
+    }
+    return QString();
+}
+
+void MainWindow::showBannedWordsDialog()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Banned words"));
+    dialog.resize(260, 340);
+
+    auto *layout = new QVBoxLayout(&dialog);
+
+    auto *description = new QLabel(
+        tr("A non-moderator's message containing any of these words is deleted from Twitch chat and never "
+           "read aloud. It still appears here, marked \"(deleted)\". Moderators and you are always exempt."),
+        &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    // Same scrollable list-of-rows pattern as muted users/presets.
+    auto *scrollArea = new QScrollArea(&dialog);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *scrollContents = new QWidget(scrollArea);
+    auto *listLayout = new QVBoxLayout(scrollContents);
+    listLayout->setSpacing(0);
+    listLayout->setContentsMargins(0, 0, 0, 0);
+    scrollArea->setWidget(scrollContents);
+    layout->addWidget(scrollArea, 1);
+
+    std::function<void()> rebuildList;
+    rebuildList = [this, listLayout, scrollContents, &rebuildList]() {
+        QLayoutItem *item;
+        while ((item = listLayout->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+
+        for (const QString &word : std::as_const(m_bannedWords)) {
+            auto *row = new QWidget(scrollContents);
+            auto *rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(2, 1, 2, 1);
+            rowLayout->setSpacing(2);
+
+            auto *wordLabel = new QLabel(word, row);
+            rowLayout->addWidget(wordLabel, 1);
+
+            auto *removeButton = new QToolButton(row);
+            removeButton->setText(QStringLiteral("×"));
+            removeButton->setToolTip(tr("Remove this word"));
+            removeButton->setCursor(Qt::PointingHandCursor);
+            removeButton->setStyleSheet(QStringLiteral(
+                "QToolButton { color: #333333; background: transparent; border: none; font-weight: bold; }"
+                "QToolButton:hover { color: black; background-color: #d0d0d0; }"));
+            connect(removeButton, &QToolButton::clicked, this, [this, word, &rebuildList]() {
+                removeBannedWord(word);
+                rebuildList();
+            });
+            rowLayout->addWidget(removeButton);
+
+            listLayout->addWidget(row);
+        }
+
+        listLayout->addStretch();
+    };
+    rebuildList();
+
+    auto *addLayout = new QHBoxLayout();
+    auto *addEdit = new QLineEdit(&dialog);
+    addEdit->setPlaceholderText(tr("Word to ban"));
+    addLayout->addWidget(addEdit);
+    auto *addButton = new QPushButton(tr("Add"), &dialog);
+    addLayout->addWidget(addButton);
+    layout->addLayout(addLayout);
+
+    // Stored/matched lowercase so the filter is case-insensitive regardless
+    // of how the word is typed here or cased in the actual message.
+    auto addWord = [this, addEdit, &rebuildList]() {
+        const QString word = addEdit->text().trimmed().toLower();
+        if (word.isEmpty())
+            return;
+        if (m_bannedWords.contains(word, Qt::CaseInsensitive)) {
+            addEdit->clear();
+            return;
+        }
+
+        logger.info("Banned word added: " + word.toStdString());
+        m_bannedWords << word;
+        saveBannedWords();
+        addEdit->clear();
+        rebuildList();
+    };
+    connect(addButton, &QPushButton::clicked, &dialog, addWord);
+    connect(addEdit, &QLineEdit::returnPressed, &dialog, addWord);
+
+    auto *buttonBox2 = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    buttonBox2->button(QDialogButtonBox::Close)->setText(tr("Close"));
+    connect(buttonBox2, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttonBox2);
 
     dialog.exec();
 }

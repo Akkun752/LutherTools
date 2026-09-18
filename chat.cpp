@@ -1,7 +1,42 @@
 #include "chat.h"
+#include "third_party/logger.h"
 
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
+
+namespace {
+
+struct MessageTags
+{
+    bool isModerator = false;
+    QString id;
+};
+
+// IRCv3 tags look like "badge-info=;badges=moderator/1,subscriber/12;...;id=<uuid>;mod=1;...".
+// The broadcaster's own messages carry "broadcaster/1" in badges instead of
+// a separate flag, so both are checked.
+MessageTags parseTags(const QString &tags)
+{
+    MessageTags result;
+    for (const QString &pair : tags.split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+        const int eq = pair.indexOf(QLatin1Char('='));
+        if (eq < 0)
+            continue;
+        const QString key = pair.left(eq);
+        const QString value = pair.mid(eq + 1);
+
+        if (key == QLatin1String("id"))
+            result.id = value;
+        else if (key == QLatin1String("mod") && value == QLatin1String("1"))
+            result.isModerator = true;
+        else if (key == QLatin1String("badges")
+                 && (value.contains(QLatin1String("moderator/")) || value.contains(QLatin1String("broadcaster/"))))
+            result.isModerator = true;
+    }
+    return result;
+}
+
+} // namespace
 
 const QString Chat::TwitchServer = QStringLiteral("irc.chat.twitch.tv");
 const quint16 Chat::TwitchPort = 6667;
@@ -67,6 +102,12 @@ void Chat::reconnect()
 
 void Chat::onConnected()
 {
+    // Requests IRCv3 tags: without this, PRIVMSG lines carry no badge or
+    // message-id information at all, needed respectively for moderator
+    // detection and for the banned-words auto-deletion feature (Twitch's
+    // delete-message API takes the message's id).
+    sendLine(QStringLiteral("CAP REQ :twitch.tv/tags"));
+
     if (m_login.isEmpty() || m_oauthToken.isEmpty()) {
         // No credentials: anonymous PASS/NICK, like read.py's
         // connect_to_twitch(). Read-only (Twitch refuses to let an
@@ -81,6 +122,8 @@ void Chat::onConnected()
     }
     sendLine(QStringLiteral("JOIN #%1").arg(m_channel));
 
+    logger.info("Twitch IRC connected: channel=" + m_channel.toStdString()
+                + (m_login.isEmpty() ? " (anonymous)" : " (authenticated as " + m_login.toStdString() + ")"));
     emit statusChanged(QStringLiteral("Connected to %1's chat").arg(m_channel));
 }
 
@@ -121,15 +164,20 @@ void Chat::processLine(const QString &line)
         return;
     }
 
-    // Equivalent of parse_message(): ":(\w+)!.*PRIVMSG #\w+ :(.+)"
-    static const QRegularExpression pattern(QStringLiteral(R"(^:(\w+)!.*PRIVMSG #\w+ :(.+)$)"));
+    // Equivalent of parse_message(): ":(\w+)!.*PRIVMSG #\w+ :(.+)", with an
+    // optional leading "@tag1=val1;tag2=val2 " IRCv3 tags block (present
+    // once the twitch.tv/tags capability has been acknowledged).
+    static const QRegularExpression pattern(QStringLiteral(R"(^(?:@(\S+) )?:(\w+)!.*PRIVMSG #\w+ :(.+)$)"));
     const QRegularExpressionMatch match = pattern.match(line);
-    if (match.hasMatch())
-        emit messageReceived(match.captured(1), match.captured(2).trimmed());
+    if (match.hasMatch()) {
+        const MessageTags tags = parseTags(match.captured(1));
+        emit messageReceived(match.captured(2), match.captured(3).trimmed(), tags.isModerator, tags.id);
+    }
 }
 
 void Chat::onDisconnected()
 {
+    logger.info("Twitch IRC disconnected: channel=" + m_channel.toStdString());
     emit statusChanged(QStringLiteral("Connection closed"));
 }
 
