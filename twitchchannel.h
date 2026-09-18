@@ -36,6 +36,12 @@ public:
     // Searches categories by name (for autocompletion); emits categoriesFound().
     void searchCategories(const QString &query);
 
+    // Deletes a single chat message (requires the moderator:manage:chat_messages
+    // scope and moderator rights on the channel - the connected account
+    // always has both on its own channel). Emits messageDeleted() or
+    // messageDeleteFailed().
+    void deleteMessage(const QString &messageId);
+
 signals:
     void infoReceived(const QString &title, const QString &gameName, const QString &gameId,
                        const QStringList &tags);
@@ -44,6 +50,8 @@ signals:
     void updateFailed(const QString &reason);
     // (name, id) pairs, in the order returned by Twitch (decreasing relevance).
     void categoriesFound(const QVector<QPair<QString, QString>> &categories);
+    void messageDeleted(const QString &messageId);
+    void messageDeleteFailed(const QString &reason);
 
 private:
     TwitchAuth *m_auth;

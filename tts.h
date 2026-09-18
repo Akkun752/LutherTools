@@ -12,36 +12,31 @@
 
 class QTextToSpeech;
 
-// Une voix locale installée sur la machine, exposée par le backend Qt
-// TextToSpeech (SAPI/OneCore sous Windows, speech-dispatcher/flite sous
-// Linux, AVSpeechSynthesizer sous macOS...).
+// A local voice installed on the machine, exposed by the Qt TextToSpeech
+// backend (SAPI/OneCore on Windows, speech-dispatcher/flite on Linux,
+// AVSpeechSynthesizer on macOS...).
 struct SapiVoice
 {
-    QVoice voice;  // objet QVoice complet, nécessaire pour re-sélectionner la voix
-    QString name;  // nom lisible, ex: "Microsoft Hortense Desktop - French" ou "french-mbrola-1"
+    QVoice voice;  // full QVoice object, needed to re-select the voice
+    QString name;  // readable name, e.g. "Microsoft Hortense Desktop - French" or "french-mbrola-1"
 };
 
-// Moteur TTS : empile les messages à lire et les synthétise un par un, dans un
-// thread dédié, avec une voix choisie au hasard à chaque message.
+// TTS engine: queues up messages to read and synthesizes them one by one, in
+// a dedicated thread, with a voice picked at random for each message.
 //
-// C'est l'équivalent du worker TTS de read.py (asyncio + queue.Queue +
-// edge_tts.Communicate + sounddevice) :
-//  - enqueue()      ~= tts_queue.put(message)
-//  - run()          ~= _tts_worker() / start_tts_loop()
-//  - speakOneEdge() ~= le bloc edge_tts.Communicate/tts.save()/sd.play()/sd.wait()
+// Synthesis first tries the edge-tts cloud service (Denise, Eloise,
+// Henri...) and, if unavailable (no network, protocol broken on Microsoft's
+// end, timeout...), automatically falls back to a local voice via
+// QTextToSpeech (Qt Speech module, portable across Windows/Linux/macOS) so
+// it's never silent.
 //
-// La synthèse essaie d'abord le service cloud edge-tts (mêmes voix que
-// read.py : Denise, Eloise, Henri...) et, si indisponible (pas de réseau,
-// protocole cassé côté Microsoft, timeout...), bascule automatiquement sur
-// une voix locale via QTextToSpeech (module Qt Speech, portable Windows/Linux/
-// macOS) pour ne jamais rester muet.
-//
-// Deux filtres optionnels, réglables en direct :
-//  - "lire 1 message sur N" : n'envoie qu'un message reçu sur N à la synthèse.
-//  - "saturation aléatoire" : parmi les messages effectivement lus, chacun a
-//    une chance (en %) d'être joué à un volume "saturé" = facteur × le
-//    volume normal (ex: facteur 20 = 20 fois plus fort) au lieu du volume
-//    normal.
+// Two optional filters, adjustable live:
+//  - "read 1 message out of N": only forwards one message out of every N
+//    received to synthesis.
+//  - "random saturation": among the messages actually read, each one has a
+//    chance (in %) of being played at a "saturated" volume = factor × the
+//    normal volume (e.g. factor 20 = 20 times louder) instead of the normal
+//    volume.
 class TTS : public QThread
 {
     Q_OBJECT
@@ -50,30 +45,29 @@ public:
     explicit TTS(QObject *parent = nullptr);
     ~TTS() override;
 
-    // Ajoute un message à la file d'attente (sous réserve du filtre "lire 1
-    // message sur N") et démarre le thread si besoin.
+    // Adds a message to the queue (subject to the "read 1 message out of N"
+    // filter) and starts the thread if needed.
     void enqueue(const QString &message);
 
-    // Voix locales détectées au démarrage (utilisées en repli).
+    // Local voices detected at startup (used as a fallback).
     const std::vector<SapiVoice> &availableVoices() const { return m_voices; }
 
-    // Volume de base de la voix locale de repli, 0-100 (QTextToSpeech ne
-    // permet pas de sur-amplifier au-delà de 100%, contrairement au flux
-    // edge-tts).
+    // Base volume of the fallback local voice, 0-100 (QTextToSpeech can't
+    // over-amplify beyond 100%, unlike the edge-tts stream).
     void setVolume(int percent);
 
-    // Filtre "Lire 1 message sur N".
+    // "Read 1 message out of N" filter.
     void setReadEveryNEnabled(bool enabled);
     void setReadEveryN(int n);
 
-    // Filtre "Saturation aléatoire" : chancePercent% des messages lus sont
-    // joués à factor fois le volume de base (ex: 20 = 20x plus fort).
+    // "Random saturation" filter: chancePercent% of the messages read are
+    // played at factor times the base volume (e.g. 20 = 20x louder).
     void setSaturationEnabled(bool enabled);
     void setSaturationFactor(int factor);
     void setSaturationChancePercent(int chancePercent);
 
-    // Demande l'arrêt du thread après le message en cours (à appeler avant la
-    // destruction si on ne veut pas attendre la vidange complète de la file).
+    // Requests the thread to stop after the current message (call before
+    // destruction if you don't want to wait for the queue to fully drain).
     void stop();
 
 signals:

@@ -14,10 +14,9 @@
 
 namespace {
 
-// Voix cloud edge-tts (mêmes que VOIX_DISPONIBLES dans read.py) : c'est le
-// service que Microsoft Edge utilise pour "Lire à voix haute", pas des voix
-// locales. Essayé en priorité, avec repli automatique sur QTextToSpeech si
-// le service est inaccessible.
+// edge-tts cloud voices: this is the service Microsoft Edge uses for "Read
+// aloud", not local voices. Tried first, with automatic fallback to
+// QTextToSpeech if the service is unreachable.
 const QVector<QString> &edgeVoices()
 {
     static const QVector<QString> voices = {
@@ -41,8 +40,8 @@ const QVector<QString> &edgeVoices()
 TTS::TTS(QObject *parent)
     : QThread(parent)
 {
-    // L'énumération des voix a lieu tout de suite pour pouvoir les exposer
-    // via availableVoices() avant même le premier enqueue()/start().
+    // Voice enumeration happens right away so they can be exposed via
+    // availableVoices() before the very first enqueue()/start().
     loadVoices();
 }
 
@@ -56,10 +55,10 @@ void TTS::loadVoices()
 {
     m_voices.clear();
 
-    // QTextToSpeech utilise le moteur par défaut de la plateforme :
-    // SAPI/OneCore sous Windows, speech-dispatcher (ou flite/espeak selon
-    // l'installation) sous Linux, AVSpeechSynthesizer sous macOS. Un seul
-    // code, portable, sans dépendance système écrite à la main.
+    // QTextToSpeech uses the platform's default engine: SAPI/OneCore on
+    // Windows, speech-dispatcher (or flite/espeak depending on the install)
+    // on Linux, AVSpeechSynthesizer on macOS. One codebase, portable, no
+    // hand-written system dependency.
     QTextToSpeech engine;
     engine.setLocale(QLocale(QLocale::French));
 
@@ -72,9 +71,9 @@ void TTS::loadVoices()
         m_voices.push_back(entry);
     }
 
-    // Si aucune voix française n'est disponible (moteur système sans données
-    // fr installées), on retente sans filtre de langue plutôt que de rester
-    // sans repli local du tout.
+    // If no French voice is available (system engine without French data
+    // installed), retry without a language filter rather than being left
+    // with no local fallback at all.
     if (m_voices.empty()) {
         engine.setLocale(QLocale());
         const QVector<QVoice> fallbackVoices = engine.availableVoices();
@@ -94,7 +93,7 @@ void TTS::enqueue(const QString &message)
         QMutexLocker locker(&m_mutex);
 
         ++m_receivedCount;
-        // Filtre "Lire 1 message sur N" : seul le N-ième message reçu passe.
+        // "Read 1 message out of N" filter: only the Nth received message goes through.
         if (m_readEveryNEnabled && (m_receivedCount % qMax(1, m_readEveryN)) != 0)
             return;
 
@@ -169,13 +168,13 @@ void TTS::run()
     }
 }
 
-// Détermine le volume de ce message : normalement le volume de base (x1.0
-// côté edge-tts, m_volume% côté repli local), sauf si la "saturation
-// aléatoire" est active et que le tirage aléatoire tombe dans
-// m_saturationChancePercent%, auquel cas il est joué à m_saturationFactor
-// fois le volume de base (ex: 20 = vingt fois plus fort). localVolumePercent
-// reçoit l'équivalent pour le repli local : celui-ci ne pouvant jamais
-// dépasser 100%, tout facteur ≥ 1 y revient simplement au volume maximum.
+// Determines this message's volume: normally the base volume (x1.0 on the
+// edge-tts side, m_volume% on the local-fallback side), unless "random
+// saturation" is enabled and the random roll falls within
+// m_saturationChancePercent%, in which case it's played at m_saturationFactor
+// times the base volume (e.g. 20 = twenty times louder). localVolumePercent
+// receives the equivalent for the local fallback: since that can never
+// exceed 100%, any factor ≥ 1 simply comes back as the maximum volume there.
 float TTS::nextVolumeMultiplier(int &localVolumePercent)
 {
     QMutexLocker locker(&m_mutex);
@@ -197,9 +196,9 @@ bool TTS::speakOne(const QString &message)
     int localVolumePercent = m_volume;
     const float volumeMultiplier = nextVolumeMultiplier(localVolumePercent);
 
-    // edge-tts (cloud, mêmes voix que read.py) en priorité ; repli sur une
-    // voix locale (QTextToSpeech) si le service est inaccessible pour une
-    // raison quelconque (pas de réseau, protocole cassé côté Microsoft,
+    // edge-tts (cloud, same voices) as priority; fallback to a
+    // local voice (QTextToSpeech) if the service is unreachable for any
+    // reason (no network, broken protocol on Microsoft side,
     // timeout...).
     if (speakOneEdge(message, volumeMultiplier))
         return true;
@@ -240,10 +239,10 @@ bool TTS::speakOneEdge(const QString &message, float volumeMultiplier)
     return played;
 }
 
-// Décode le MP3 renvoyé par edge-tts (dr_mp3), applique le multiplicateur de
-// volume sur le PCM brut avec écrêtage à ±1.0 (équivalent du
-// np.clip(audio_data * VOLUME_MULTIPLIER, -1.0, 1.0) de read.py), puis joue
-// le résultat sur la sortie audio par défaut.
+// Decodes the MP3 returned by edge-tts (dr_mp3), applies the volume
+// multiplier on raw PCM with clipping to ±1.0 (equivalent to
+// np.clip(audio_data * VOLUME_MULTIPLIER, -1.0, 1.0)), then plays
+// the result on the default audio output.
 bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
 {
     drmp3 mp3;
@@ -299,10 +298,10 @@ bool TTS::playMp3(const QByteArray &mp3Data, float volumeMultiplier)
     return true;
 }
 
-// Repli local, portable, via QTextToSpeech (module Qt Speech). Un moteur est
-// recréé ici (plutôt que réutilisé depuis loadVoices()) car il doit vivre
-// sur le thread qui l'utilise ; celui-ci est le thread TTS (QThread::run()),
-// différent du thread qui a construit TTS.
+// Local, portable fallback via QTextToSpeech (Qt Speech module). An engine is
+// recreated here (rather than reused from loadVoices()) because it must live
+// on the thread using it; this is the TTS thread (QThread::run()),
+// different from the thread that constructed TTS.
 bool TTS::speakOneLocal(const QString &message, int volumePercent)
 {
     if (m_voices.empty()) {
@@ -310,24 +309,24 @@ bool TTS::speakOneLocal(const QString &message, int volumePercent)
         return false;
     }
 
-    // Voix aléatoire parmi toutes les voix locales disponibles, comme
-    // random.choice(VOIX_DISPONIBLES) dans read.py.
+    // Random voice selected from all available local voices, like
+    // selecting a random choice from available voices.
     const int index = int(QRandomGenerator::global()->bounded(int(m_voices.size())));
     const SapiVoice &voice = m_voices[index];
 
     QTextToSpeech engine;
     engine.setVoice(voice.voice);
-    // QTextToSpeech attend le volume en [-1.0, 1.0] (0.0 = volume "normal"
-    // du système), pas en pourcentage absolu comme SAPI ; on le mappe donc
-    // sur [-1.0, 0.0] pour rester un simple atténuateur, jamais un
-    // amplificateur (comme l'ancien SetVolume(0-100)).
+    // QTextToSpeech expects volume in [-1.0, 1.0] (0.0 = "normal" system volume),
+    // not as an absolute percentage like SAPI; we therefore map it
+    // to [-1.0, 0.0] to remain a simple attenuator, never an
+    // amplifier (like the former SetVolume(0-100)).
     engine.setVolume((qBound(0, volumePercent, 100) - 100) / 100.0);
 
-    // say() est asynchrone : on n'attend donc pas un retour direct, mais le
-    // prochain changement d'état signalant la fin (Ready = terminé
-    // normalement, Error = échec). stateChanged() ne se déclenche que sur un
-    // changement réel, jamais pour l'état initial : pas de risque de sortir
-    // de la boucle avant même que say() n'ait commencé à parler.
+    // say() is asynchronous: we do not wait for a direct return, but for the
+    // next state change indicating completion (Ready = finished
+    // normally, Error = failure). stateChanged() only triggers on a
+    // real change, never for the initial state: no risk of exiting
+    // the loop before say() has even started speaking.
     bool ok = true;
     QEventLoop loop;
     connect(&engine, &QTextToSpeech::stateChanged, &loop, [&](QTextToSpeech::State state) {
